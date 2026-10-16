@@ -115,8 +115,15 @@ async def agent_turn(history: list, user_text: str, state: Callable[[], Awaitabl
         tool_uses = [b for b in resp.content if b.type == "tool_use"]
         if not tool_uses:
             break
-        messages.append({"role": "assistant",
-                         "content": [b.model_dump(exclude_none=True) for b in resp.content]})
+        # SDK obyektlarini emas, faqat API qabul qiladigan maydonlarni qaytaramiz
+        assistant_blocks = []
+        for b in resp.content:
+            if b.type == "text" and b.text:
+                assistant_blocks.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                assistant_blocks.append({"type": "tool_use", "id": b.id, "name": b.name,
+                                         "input": b.input or {}})
+        messages.append({"role": "assistant", "content": assistant_blocks})
         results = []
         for tu in tool_uses:
             try:

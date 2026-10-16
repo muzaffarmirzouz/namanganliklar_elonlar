@@ -345,8 +345,10 @@ async def run_ai(bot: Bot, uid: int, text: str):
             pass
         try:
             reply = await ai.agent_turn(history, text, state, on_tool)
-        except Exception:
+        except Exception as e:
             log.exception("AI xatosi")
+            await to_group(bot, f"⚠️ AI xatosi (mijoz <code>{uid}</code>):\n<code>{escape(type(e).__name__)}: "
+                                f"{escape(str(e))[:700]}</code>")
             await bot.send_message(uid, "Kechirasiz, hozir texnik nosozlik bor. Bir daqiqadan keyin qayta yozing 🙏",
                                    parse_mode=None, **kw)
             return
