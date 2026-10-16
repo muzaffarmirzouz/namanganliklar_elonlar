@@ -21,7 +21,8 @@ from aiogram.types import (BusinessConnection, CallbackQuery, InlineKeyboardButt
 import ai
 import db
 import publisher
-from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, MAX_PHOTOS,
+from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
+                    CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
 from formatting import fmt_sum
 from payments import payme_link, pick_amount
@@ -300,7 +301,11 @@ async def run_ai(bot: Bot, uid: int, text: str):
                              "To'lagan bo'lsa-yu joylanmagan bo'lsa — to'lov chekining skrinshotini shu chatga yuborishini ayt. "
                              "Silkani qayta so'rasa go_to_payment chaqir. "
                              f"Silka ochilmayapti/ishlamayapti desa: Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» "
-                             "deb yozib, o'sha yerdan aynan shu summani to'lashini ayt.")
+                             "deb yozib, o'sha yerdan aynan shu summani to'lashini ayt. "
+                             + (f"Click'dan to'lamoqchi bo'lsa: Click ilovasida «{CLICK_SEARCH_NAME}» deb qidirib to'lashini ayt. "
+                                "Mijoz Click'dan to'laganini aytsa yoki 'to'ladim' deb yozsa-yu e'lon chiqmagan bo'lsa — "
+                                "CHEK SKRINSHOTINI so'ra; skrinshotsiz tasdiqlab bo'lmaydi, 'tasdiqlandi' dema. "
+                                "Chek kelgach admin tekshiradi." if CLICK_ENABLED else ""))
             return "\n".join(lines)
 
         async def on_tool(name: str, args: dict) -> str:
@@ -445,6 +450,9 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
         text += f"\n👉 Payme orqali to'lash: {link}\n"
     text += (f"\n📱 Silka ochilmasa: Payme ilovasida qidiruvga <b>«{escape(PAYME_SEARCH_NAME)}»</b> deb yozing "
              "va o'sha yerdan to'lang.\n")
+    if CLICK_ENABLED:
+        text += (f"\n🔵 <b>Click orqali:</b> Click ilovasida <b>«{escape(CLICK_SEARCH_NAME)}»</b> deb qidiring, shu summani "
+                 "to'lang va <b>chek skrinshotini albatta shu yerga yuboring</b> — Click to'lovi faqat chek bilan tasdiqlanadi.\n")
     text += ("\nTo'lov tushishi bilan e'loningiz avtomatik kanalga joylanadi (odatda 1-2 daqiqa).\n"
              "10 daqiqada joylanmasa — to'lov chekining skrinshotini shu yerga yuboring.\n\n"
              f"⏳ To'lov {PAYMENT_TTL_HOURS} soat ichida qilinishi kerak.")
@@ -460,6 +468,10 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
                 "Agar 10 daqiqada chiqmasa, to'lov chekining skrinshotini shu yerga tashlab qo'ying")
         await send_human(bot, uid, msg1, kw)
         await send_human(bot, uid, msg2, kw)
+        if CLICK_ENABLED:
+            await send_human(bot, uid, f"Click'dan ham bo'ladi: Click ilovasida «{CLICK_SEARCH_NAME}» deb qidiring, "
+                                       f"shu summani tashlang. Faqat Click'dan to'lasangiz, chekining skrinshotini "
+                                       f"albatta shu yerga yuboring, cheksiz tasdiqlay olmayman", kw)
         await send_human(bot, uid, msg3, kw)
         return
     rows = []
@@ -525,11 +537,35 @@ async def forward_receipt(bot: Bot, m: Message, o: dict):
         InlineKeyboardButton(text="✅ Tasdiqlash", callback_data=f"adm_ok:{o['id']}"),
         InlineKeyboardButton(text="❌ Rad etish", callback_data=f"adm_no:{o['id']}"),
     ]])
+    # Chekni AI o'qib, adminga yordamchi ma'lumot beradi (qaror baribir adminniki)
+    ai_line = ""
+    try:
+        buf = await bot.download(m.photo[-1])
+        info = await ai.read_receipt(buf.read())
+    except Exception:
+        log.exception("chekni yuklab bo'lmadi")
+        info = None
+    if info and info.get("is_receipt"):
+        amt = info.get("amount")
+        svc = (info.get("service") or "?").capitalize()
+        match = ("✅ summa mos" if amt and int(amt) == o["amount"]
+                 else f"⚠️ summa MOS EMAS (kutilgan {fmt_sum(o['amount'])})" if amt else "❓ summa o'qilmadi")
+        ok = "" if info.get("success", True) else "\n⚠️ Chekda 'muvaffaqiyatli' belgisi ko'rinmadi"
+        ai_line = (f"\n\n🤖 Chekdan: <b>{svc}</b> · {fmt_sum(int(amt)) + ' so‘m' if amt else '?'} · {match}"
+                   + (f"\nQabul qiluvchi: {escape(str(info['recipient']))}" if info.get("recipient") else "")
+                   + (f"\nVaqt: {escape(str(info['datetime']))}" if info.get("datetime") else "") + ok
+                   + ("\n👉 Click ilovangizdan tushganini tekshiring" if svc.lower() == "click" else ""))
+    elif info is not None:
+        # Aniq chek emas — guruhni band qilmaymiz, mijozdan qayta so'raymiz
+        await send_human(bot, user.id, "Bu rasm to'lov chekiga o'xshamadi. To'lov qilgan bo'lsangiz, "
+                                       "Payme yoki Click'dagi chekning skrinshotini tashlang", await db.send_kw(user.id))
+        return
     caption = (f"🧾 <b>Chek</b> — e'lon #{o['id']}\n"
                f"Kutilgan summa: <b>{fmt_sum(o['amount'])} so'm</b>\n"
                f"👤 <a href=\"tg://user?id={user.id}\">{escape(user.full_name)}</a>"
                + (f" (@{user.username})" if user.username else "")
-               + ("\n💬 Business lichka orqali" if m.business_connection_id else ""))
+               + ("\n💬 Business lichka orqali" if m.business_connection_id else "")
+               + ai_line)[:1024]
     await bot.send_photo(PAYMENT_GROUP_ID, m.photo[-1].file_id, caption=caption, reply_markup=kb)
     await bot.send_message(user.id, "Chekni oldim, tekshirib e'loningizni chiqarib yuboraman 👍",
                            **await db.send_kw(user.id))

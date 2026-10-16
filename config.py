@@ -41,6 +41,9 @@ PAYME_MERCHANT_ID = os.getenv("PAYME_MERCHANT_ID", "")
 PAYME_ACCOUNT_KEY = os.getenv("PAYME_ACCOUNT_KEY", "order_id")
 # Silka ochilmasa, Payme ilovasida shu nom bilan qidiriladi
 PAYME_SEARCH_NAME = os.getenv("PAYME_SEARCH_NAME", "Namanganliklar")
+# Click: alohida guruh yo'q — mijoz chek skrinshotini yuboradi, admin tasdiqlaydi
+CLICK_ENABLED = os.getenv("CLICK_ENABLED", "1") == "1"
+CLICK_SEARCH_NAME = os.getenv("CLICK_SEARCH_NAME", "Namanganliklar group")
 PAYMENT_TTL_HOURS = int(os.getenv("PAYMENT_TTL_HOURS", "24"))
 
 # --- E'lon ---

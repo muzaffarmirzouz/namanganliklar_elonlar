@@ -23,6 +23,7 @@ QOIDALAR:
   boshqa e'lon kanallari, onlayn kurs/xizmat reklamasi, ish e'lonlari, kredit/qarz, kazino/bukmeker/stavka, kripto "daromad",
   qurol, dori-darmon, giyohvand, tamaki/alkogol, 18+, hujjat sotish, aldov ehtimoli bor narsalar.
 - E'lon narxi: {fmt_sum(AD_PRICE)} so'm. 1 ta e'lon kanalga 1 marta joylanadi. To'lov faqat Payme orqali.
+  Click orqali ham to'lash mumkin, lekin Click to'lovi faqat CHEK SKRINSHOTI bilan tasdiqlanadi.
   To'lov silkasini SEN bermaysan — mijoz oldindan ko'rishni tasdiqlagach bot o'zi yuboradi. O'zingdan karta raqami yoki silka o'ylab topma.
 - Mijoz qaysi tilda yozsa (o'zbek lotin/kirill, rus) — o'sha tilda javob ber.
 
@@ -173,4 +174,32 @@ async def parse_payment_text(text: str) -> dict | None:
         return json.loads(m.group()) if m else None
     except Exception:
         log.exception("payment parse failed")
+        return None
+
+
+RECEIPT_PROMPT = """Bu to'lov cheki (Click, Payme yoki bank ilovasi skrinshoti). Faqat JSON qaytar:
+{"is_receipt": true/false, "service": "click"|"payme"|"bank"|"boshqa", "amount": <so'mda butun son yoki null>,
+ "recipient": "<qabul qiluvchi nomi yoki null>", "success": true/false, "datetime": "<sana-vaqt yoki null>"}
+success — to'lov muvaffaqiyatli o'tganmi (Успешно, Muvaffaqiyatli, To'lov qildingiz va h.k.)."""
+
+
+async def read_receipt(image_bytes: bytes, media_type: str = "image/jpeg") -> dict | None:
+    """Chek skrinshotidan summa va to'lov tizimini o'qiydi (admin uchun yordamchi ma'lumot)."""
+    import base64
+    try:
+        resp = await client.messages.create(
+            model=CLAUDE_FAST_MODEL,
+            max_tokens=200,
+            system=RECEIPT_PROMPT,
+            messages=[{"role": "user", "content": [
+                {"type": "image", "source": {"type": "base64", "media_type": media_type,
+                                             "data": base64.b64encode(image_bytes).decode()}},
+                {"type": "text", "text": "Chekni o'qi."},
+            ]}],
+        )
+        raw = "".join(b.text for b in resp.content if b.type == "text")
+        m = re.search(r"\{.*\}", raw, re.S)
+        return json.loads(m.group()) if m else None
+    except Exception:
+        log.exception("chekni o'qib bo'lmadi")
         return None
