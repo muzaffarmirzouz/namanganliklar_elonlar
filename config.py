@@ -39,6 +39,8 @@ PAYME_LINK = os.getenv("PAYME_LINK", "")
 # Payme Business kassa ID si bo'lsa — summa avtomatik qo'yilgan checkout silka yasaladi
 PAYME_MERCHANT_ID = os.getenv("PAYME_MERCHANT_ID", "")
 PAYME_ACCOUNT_KEY = os.getenv("PAYME_ACCOUNT_KEY", "order_id")
+# Silka ochilmasa, Payme ilovasida shu nom bilan qidiriladi
+PAYME_SEARCH_NAME = os.getenv("PAYME_SEARCH_NAME", "Namanganliklar")
 PAYMENT_TTL_HOURS = int(os.getenv("PAYMENT_TTL_HOURS", "24"))
 
 # --- E'lon ---

@@ -21,19 +21,19 @@ async def confirm_and_publish(bot: Bot, order_id: int, paid_by: str, manual: boo
 
     order = await db.get_order(order_id)
     await notify_user(bot, order["user_id"],
-                       "✅ To'lovingiz qabul qilindi! E'loningiz hozir kanalga joylanmoqda…")
+                       "To'lov tushdi, rahmat! Hozir kanalga chiqaraman")
     try:
         link = await publisher.publish(bot, order)
     except Exception as e:
         log.exception("publish failed")
         await notify_user(bot, order["user_id"],
-                           "⏳ To'lov qabul qilindi, e'lonni joylashda texnik kechikish bo'ldi. Admin tez orada joylaydi.")
+                           "To'lov tushdi, lekin kanalga chiqarishda biroz kechikish bo'ldi. Tez orada chiqarib qo'yaman 🙏")
         return (f"❗️ #{order_id} to'langan, lekin kanalga joylanmadi: {escape(str(e))}\n"
                 f"Qayta urinish: /joyla {order_id}")
 
     await notify_user(bot, order["user_id"],
-                       f"🎉 E'loningiz kanalga joylandi!\n{link}\n\n"
-                       "Yana e'lon bermoqchi bo'lsangiz, shunchaki yozing 🙂")
+                       f"Tayyor, e'loningiz kanalda 👇\n{link}\n\n"
+                       "Xaridor chiqishini tilayman! Yana biror narsa sotmoqchi bo'lsangiz, yozavering")
     await db.save_history(order["user_id"], [])  # keyingi e'lon toza suhbatdan boshlansin
     return f"✅ #{order_id} — {fmt_sum(order['amount'])} so'm tasdiqlandi va joylandi: {link}"
 
@@ -43,7 +43,7 @@ async def republish(bot: Bot, order_id: int) -> str:
     if not order or order["status"] != "paid":
         return "Faqat to'langan, lekin joylanmagan buyurtmani qayta joylash mumkin."
     link = await publisher.publish(bot, order)
-    await notify_user(bot, order["user_id"], f"🎉 E'loningiz kanalga joylandi!\n{link}")
+    await notify_user(bot, order["user_id"], f"Tayyor, e'loningiz kanalda 👇\n{link}")
     return f"✅ #{order_id} joylandi: {link}"
 
 

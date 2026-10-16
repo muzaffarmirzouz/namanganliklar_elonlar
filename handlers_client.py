@@ -22,7 +22,7 @@ import ai
 import db
 import publisher
 from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, MAX_PHOTOS,
-                    PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
+                    PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
 from formatting import fmt_sum
 from payments import payme_link, pick_amount
 from services import to_group
@@ -298,7 +298,9 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 lines.append(f"Mijoz e'lonni tasdiqlagan va {fmt_sum(o['amount'])} so'm to'lashi kerak (aynan shu summa). "
                              "Qoralamani endi o'zgartirib bo'lmaydi. To'lov tushgach e'lon avtomatik joylanadi. "
                              "To'lagan bo'lsa-yu joylanmagan bo'lsa — to'lov chekining skrinshotini shu chatga yuborishini ayt. "
-                             "Silkani qayta so'rasa go_to_payment chaqir.")
+                             "Silkani qayta so'rasa go_to_payment chaqir. "
+                             f"Silka ochilmayapti/ishlamayapti desa: Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» "
+                             "deb yozib, o'sha yerdan aynan shu summani to'lashini ayt.")
             return "\n".join(lines)
 
         async def on_tool(name: str, args: dict) -> str:
@@ -317,8 +319,8 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 if not o["data"].get("_preview"):
                     return "Avval show_preview chaqirib, mijozga tayyor e'lonni ko'rsat."
                 want_payment = True
-                return ("Bot javobingdan keyin to'lov summasi va Payme silkasini yuboradi. "
-                        "Sen silka yoki summa yozma — faqat qisqa minnatdorchilik bildir.")
+                return ("Bot javobingdan keyin to'lov summasi va Payme silkasini o'zi yuboradi. "
+                        "Sen silka yoki summa yozma — faqat juda qisqa yoz, masalan: 'Zo'r 👍'.")
             if name == "reset_ad":
                 # Yangi e'lon: joriy qoralama yoki TO'LANMAGAN e'lon yopiladi, to'langani tegilmaydi
                 if o and o["status"] == "paid":
@@ -347,8 +349,8 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 if miss := missing_fields(o):
                     return "Hali ko'rsatib bo'lmaydi. Yetishmayapti: " + ", ".join(miss)
                 want_preview = True
-                return ("Bot javobingdan keyin tayyor e'lonni yuboradi. Mijozga qisqa qilib: tekshirib, "
-                        "to'g'ri bo'lsa tasdiqlashini ayt.")
+                return ("Bot javobingdan keyin tayyor e'lonni yuboradi va 'hammasi to'g'rimi?' deb o'zi so'raydi. "
+                        "Sen faqat juda qisqa yoz, masalan: 'Bo'ldi, hozir tayyor e'lonni tashlayman'.")
             return "Noma'lum asbob."
 
         try:
@@ -370,7 +372,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
         await db.save_history(uid, history)
 
         if reply:
-            await bot.send_message(uid, reply, parse_mode=None, reply_markup=await reply_kb(uid), **kw)
+            await send_human(bot, uid, reply, kw, await reply_kb(uid))
         o = await db.active_order(uid)
         if want_preview and o:
             await send_preview(bot, uid, o)
@@ -378,16 +380,35 @@ async def run_ai(bot: Bot, uid: int, text: str):
             await start_payment(bot, uid, o)
 
 
+async def send_human(bot: Bot, uid: int, text: str, kw: dict, markup=None):
+    """Odamdek yuborish: avval 'yozmoqda...' turadi, uzun javob 2-3 ta qisqa xabarga bo'linadi."""
+    parts = [p.strip() for p in text.split("\n\n") if p.strip()]
+    if len(parts) > 3:  # juda ko'p bo'lak bo'lmasin
+        parts = parts[:2] + ["\n\n".join(parts[2:])]
+    for i, part in enumerate(parts):
+        # taxminan odam yozish tezligi: ~25 belgi/soniya, 1.2–5 soniya oralig'ida
+        delay = min(5.0, max(1.2, len(part) / 25))
+        try:
+            await bot.send_chat_action(uid, ChatAction.TYPING, **kw)
+        except Exception:
+            pass
+        await asyncio.sleep(delay)
+        last = i == len(parts) - 1
+        await bot.send_message(uid, part, parse_mode=None, reply_markup=markup if last else None, **kw)
+
+
 # ================= Oldindan ko'rish va to'lov =================
 async def send_preview(bot: Bot, uid: int, order: dict):
     kw = await db.send_kw(uid)
-    await bot.send_message(uid, "👇 E'loningiz kanalda shunday ko'rinadi:", **kw)
+    if kw:
+        await asyncio.sleep(1.5)
+    else:
+        await bot.send_message(uid, "👇 E'loningiz kanalda shunday ko'rinadi:")
     await publisher.send_ad(bot, uid, order, **kw)
     await db.set_preview_shown(order["id"], True)
-    if kw:  # business lichka — tugmasiz
-        await bot.send_message(uid, f"Hammasi to'g'rimi? To'g'ri bo'lsa <b>«Ha»</b> deb yozing, "
-                                    f"o'zgartirish kerak bo'lsa — nimani, yozing.\n"
-                                    f"E'lon narxi: <b>{fmt_sum(AD_PRICE)} so'm</b>.", **kw)
+    if kw:  # business lichka — tugmasiz, odamdek
+        await send_human(bot, uid, f"Kanalda shunaqa chiqadi. Hammasi to'g'rimi? To'g'ri bo'lsa «ha» deb yozing, "
+                                   f"to'g'irlash kerak bo'lsa ayting\n\nE'lon narxi {fmt_sum(AD_PRICE)} so'm", kw)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Hammasi to'g'ri — to'lovga o'tish", callback_data=f"ok:{order['id']}")],
@@ -422,13 +443,24 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
             f"Summa: <b>{fmt_sum(o['amount'])} so'm</b>\n{exact}")
     if kw and link:
         text += f"\n👉 Payme orqali to'lash: {link}\n"
+    text += (f"\n📱 Silka ochilmasa: Payme ilovasida qidiruvga <b>«{escape(PAYME_SEARCH_NAME)}»</b> deb yozing "
+             "va o'sha yerdan to'lang.\n")
     text += ("\nTo'lov tushishi bilan e'loningiz avtomatik kanalga joylanadi (odatda 1-2 daqiqa).\n"
              "10 daqiqada joylanmasa — to'lov chekining skrinshotini shu yerga yuboring.\n\n"
              f"⏳ To'lov {PAYMENT_TTL_HOURS} soat ichida qilinishi kerak.")
     if not link:
         text += "\n\n⚠️ To'lov silkasi sozlanmagan, admin bilan bog'laning."
-    if kw:
-        await bot.send_message(uid, text, disable_web_page_preview=True, **kw)
+    if kw:  # business lichka — odamdek, bo'lib-bo'lib
+        exact_h = "Aynan shu summani tashlang, so'migacha, shunda to'lovingiz avtomatik taniladi. " if UNIQUE_AMOUNT else ""
+        msg1 = f"Unda to'lovni qilib qo'ying: {fmt_sum(o['amount'])} so'm. {exact_h}"
+        msg2 = (f"Payme orqali: {link}\n\nAgar silka ochilmasa, Payme ilovasiga kirib qidiruvga "
+                f"«{PAYME_SEARCH_NAME}» deb yozing, o'sha yerdan to'lasangiz ham bo'ladi") if link else \
+               f"Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» deb yozing va o'sha yerdan to'lang"
+        msg3 = ("To'lov tushishi bilan e'loningizni kanalga chiqarib yuboraman. "
+                "Agar 10 daqiqada chiqmasa, to'lov chekining skrinshotini shu yerga tashlab qo'ying")
+        await send_human(bot, uid, msg1, kw)
+        await send_human(bot, uid, msg2, kw)
+        await send_human(bot, uid, msg3, kw)
         return
     rows = []
     if link:
@@ -499,5 +531,5 @@ async def forward_receipt(bot: Bot, m: Message, o: dict):
                + (f" (@{user.username})" if user.username else "")
                + ("\n💬 Business lichka orqali" if m.business_connection_id else ""))
     await bot.send_photo(PAYMENT_GROUP_ID, m.photo[-1].file_id, caption=caption, reply_markup=kb)
-    await bot.send_message(user.id, "🧾 Chekingiz adminga yuborildi. Tekshirilgach e'loningiz joylanadi.",
+    await bot.send_message(user.id, "Chekni oldim, tekshirib e'loningizni chiqarib yuboraman 👍",
                            **await db.send_kw(user.id))
