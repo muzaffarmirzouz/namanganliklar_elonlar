@@ -29,6 +29,26 @@ guruhga [✅ Tasdiqlash] [❌ Rad etish] tugmalari bilan keladi.
 kurs/xizmat reklamasi, ish e'lonlari, kredit, stavka, 18+, taqiqlangan narsalar. Rad etish **to'lovdan oldin** bo'ladi.
 Ro'yxatni o'zgartirish: `ai.py` → `SYSTEM_PROMPT`.
 
+## Telegram Business — lichka orqali ishlash
+
+Mijozlar botga emas, **sizning shaxsiy akkauntingizga** yozadi, bot esa siz nomingizdan javob beradi.
+Lichkada tugmalar bo'lmaydi: mijoz e'lonni "ha" deb tasdiqlaydi, Payme silkasi matnda boradi.
+Botning o'z chati (/start, tugmalar) ham ishlab turaveradi.
+
+**Ulash:** Telegram → Sozlamalar → **Telegram Business** → **Chatbots** (Чат-боты) →
+`@namelon_ai_bot` ni yozing → **javob berish (Reply to messages)** huquqini yoqing.
+Telegram Premium kerak.
+
+**Qaysi chatlarda ishlaydi:** shu sahifada "Chats" bo'limida **"Exclude contacts"** (Kontaktlardan tashqari)
+ni tanlang — shunda oila va do'stlaringizga bot javob bermaydi, faqat notanish mijozlarga.
+Kerakli odamlarni ro'yxatdan qo'lda chiqarib ham qo'yish mumkin.
+
+**Siz o'zingiz yozsangiz:** mijoz chatiga o'zingiz biror narsa yozishingiz bilan bot o'sha chatda
+`BUSINESS_PAUSE_HOURS` (12) soat jim turadi — suhbatni siz davom ettirasiz.
+Botni qayta yoqish: o'sha chatda `/ai` deb yozing yoki guruhda `/ai USER_ID`.
+
+Ulanish va uzilish haqida to'lov guruhiga xabar keladi.
+
 ## Sozlash (1 marta)
 
 ### 1. BotFather
@@ -71,6 +91,7 @@ Taxminiy xarajat: 1 ta e'lon suhbati ~$0.02–0.05, to'lov xabarini o'qish ~$0.0
 | `/joyla 37` | To'langan, lekin xato sabab joylanmagan e'lonni qayta joylash |
 | `/bekor 37` | Buyurtmani bekor qilish |
 | `/stat` | Bugungi va oylik e'lonlar soni, tushum |
+| `/ai 12345` | Lichkada jim turgan botni shu mijoz bilan qayta yoqish |
 | `/id` | Chat / foydalanuvchi ID si |
 
 ## Fayllar

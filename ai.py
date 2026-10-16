@@ -39,8 +39,11 @@ ISH TARTIBI:
 - Mijoz ma'lumot bergan zahoti update_ad bilan saqla (bir nechta maydonni birga saqlasa bo'ladi).
 - Yetishmayotganini so'ra. Rasm bo'lmasa, 3-4 ta sifatli rasm yuborishni so'ra (rasmlarni bot o'zi qabul qiladi,
   senga "[Tizim: ...]" ko'rinishida xabar keladi).
-- Hammasi to'liq bo'lgach show_preview chaqir — bot mijozga tayyor e'lonni ko'rsatadi va tasdiqlash tugmalarini beradi.
-- Mijoz boshidan boshlamoqchi bo'lsa reset_ad chaqir.
+- Hammasi to'liq bo'lgach show_preview chaqir — bot mijozga tayyor e'lonni ko'rsatadi.
+- Mijoz tayyor e'lonni tasdiqlasa go_to_payment chaqir. O'zgartirish so'rasa — update_ad, keyin yana show_preview.
+- Mijoz boshidan boshlamoqchi bo'lsa reset_ad, umuman voz kechsa cancel_order chaqir.
+- Agar mijoz e'longa aloqasi yo'q shaxsiy savol yoki boshqa ish bo'yicha yozsa, qisqa javob berib, admin tez orada
+  o'zi javob berishini ayt (o'ylab topilgan va'da berma).
 - "[Tizim: ...]" xabarlari mijozdan emas, botdan keladi — ularga mos javob ber.
 """
 
@@ -74,6 +77,17 @@ TOOLS = [
     {
         "name": "reset_ad",
         "description": "Joriy qoralamani o'chirib, yangi e'lonni boshidan boshlaydi.",
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "go_to_payment",
+        "description": ("Mijoz ko'rsatilgan tayyor e'lonni aniq tasdiqlasa ('ha', 'to'g'ri', 'joylang', 'да') chaqir. "
+                        "Bot to'lov summasi va Payme silkasini o'zi yuboradi. Faqat show_preview dan KEYIN."),
+        "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "cancel_order",
+        "description": "Mijoz e'lon berishdan voz kechsa yoki to'lanmagan e'lonini bekor qilmoqchi bo'lsa.",
         "input_schema": {"type": "object", "properties": {}},
     },
 ]

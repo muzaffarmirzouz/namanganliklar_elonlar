@@ -48,6 +48,12 @@ async def init() -> None:
         );
         """
     )
+    # Business rejimi uchun ustunlar (eski bazaga ham qo'shiladi)
+    for col in ("bc_id TEXT", "paused_until INTEGER DEFAULT 0"):
+        try:
+            await _db.execute(f"ALTER TABLE users ADD COLUMN {col}")
+        except aiosqlite.OperationalError:
+            pass  # allaqachon bor
     await _db.commit()
 
 
@@ -62,13 +68,46 @@ def _order(row) -> dict | None:
 
 
 # ---------- users ----------
-async def upsert_user(user_id: int, username: str | None, full_name: str) -> None:
+async def upsert_user(user_id: int, username: str | None, full_name: str, bc_id: str | None = None) -> None:
+    """bc_id — mijoz sizning business lichkangizga yozgan bo'lsa connection ID, botga to'g'ridan yozsa None.
+    Keyingi barcha javoblar mijoz oxirgi marta qayerdan yozgan bo'lsa, o'sha yerga boradi."""
     await _db.execute(
-        "INSERT INTO users(user_id, username, full_name, created_at) VALUES(?,?,?,?) "
-        "ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, full_name=excluded.full_name",
-        (user_id, username, full_name, int(time.time())),
+        "INSERT INTO users(user_id, username, full_name, bc_id, created_at) VALUES(?,?,?,?,?) "
+        "ON CONFLICT(user_id) DO UPDATE SET username=excluded.username, full_name=excluded.full_name, "
+        "bc_id=excluded.bc_id",
+        (user_id, username, full_name, bc_id, int(time.time())),
     )
     await _db.commit()
+
+
+async def get_user(user_id: int) -> dict | None:
+    cur = await _db.execute("SELECT user_id, username, full_name, bc_id FROM users WHERE user_id=?", (user_id,))
+    row = await cur.fetchone()
+    return dict(row) if row else None
+
+
+async def bc_id(user_id: int) -> str | None:
+    cur = await _db.execute("SELECT bc_id FROM users WHERE user_id=?", (user_id,))
+    row = await cur.fetchone()
+    return row["bc_id"] if row else None
+
+
+async def send_kw(user_id: int) -> dict:
+    """Mijozga xabar yuborishda qo'shiladigan parametrlar (business lichka bo'lsa connection ID)."""
+    bc = await bc_id(user_id)
+    return {"business_connection_id": bc} if bc else {}
+
+
+async def set_pause(user_id: int, until: int) -> None:
+    await _db.execute("INSERT OR IGNORE INTO users(user_id, created_at) VALUES(?,?)", (user_id, int(time.time())))
+    await _db.execute("UPDATE users SET paused_until=? WHERE user_id=?", (until, user_id))
+    await _db.commit()
+
+
+async def is_paused(user_id: int) -> bool:
+    cur = await _db.execute("SELECT paused_until FROM users WHERE user_id=?", (user_id,))
+    row = await cur.fetchone()
+    return bool(row and (row["paused_until"] or 0) > time.time())
 
 
 async def get_history(user_id: int) -> list:
@@ -128,6 +167,16 @@ async def update_data(order_id: int, fields: dict) -> dict:
                       (json.dumps(data, ensure_ascii=False), order_id))
     await _db.commit()
     return data
+
+
+async def set_preview_shown(order_id: int, shown: bool) -> None:
+    """Mijozga tayyor e'lon ko'rsatilganmi (lichkada 'ha' deb tasdiqlash uchun kerak)."""
+    o = await get_order(order_id)
+    data = o["data"]
+    data["_preview"] = shown
+    await _db.execute("UPDATE orders SET data=? WHERE id=?",
+                      (json.dumps(data, ensure_ascii=False), order_id))
+    await _db.commit()
 
 
 async def set_photos(order_id: int, photos: list[str]) -> None:

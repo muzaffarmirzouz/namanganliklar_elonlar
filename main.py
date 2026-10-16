@@ -18,7 +18,7 @@ import handlers_client  # noqa: E402
 import handlers_group  # noqa: E402
 import publisher  # noqa: E402
 from formatting import fmt_sum  # noqa: E402
-from services import to_group  # noqa: E402
+from services import notify_user, to_group  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("main")
@@ -41,14 +41,10 @@ async def housekeeping(bot: Bot):
         try:
             for o in await db.expired_awaiting(config.PAYMENT_TTL_HOURS * 3600):
                 await db.set_status(o["id"], "expired")
-                try:
-                    await bot.send_message(
-                        o["user_id"],
-                        f"⌛️ #{o['id']} e'lon uchun to'lov muddati tugadi ({fmt_sum(o['amount'])} so'm). "
-                        "Agar to'lagan bo'lsangiz, chekni adminga yuboring. Yangi e'lon uchun «🆕 Yangi e'lon».",
-                        parse_mode=None)
-                except Exception:
-                    pass
+                await notify_user(
+                    bot, o["user_id"],
+                    f"⌛️ #{o['id']} e'lon uchun to'lov muddati tugadi ({fmt_sum(o['amount'])} so'm). "
+                    "Agar to'lagan bo'lsangiz, chekni shu yerga yuboring. Yangi e'lon uchun yana yozing.")
             if config.AUTO_DELETE_HOURS > 0:
                 for o in await db.to_autodelete(config.AUTO_DELETE_HOURS * 3600):
                     try:

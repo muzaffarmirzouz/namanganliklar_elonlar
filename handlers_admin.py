@@ -9,7 +9,7 @@ from aiogram.types import CallbackQuery, Message
 import db
 from config import ADMIN_IDS
 from formatting import fmt_sum
-from services import confirm_and_publish, republish
+from services import confirm_and_publish, notify_user, republish
 
 router = Router()
 is_admin = F.from_user.id.in_(ADMIN_IDS)
@@ -62,6 +62,17 @@ async def cmd_cancel(m: Message, command: CommandObject):
     await m.answer(f"#{oid} bekor qilindi.")
 
 
+@router.message(Command("ai"), is_admin)
+async def cmd_resume_ai(m: Message, command: CommandObject):
+    """Siz lichkada mijozga o'zingiz yozgach bot o'sha chatda jim turadi. /ai USER_ID — qayta yoqadi."""
+    if not command.args or not command.args.strip().isdigit():
+        await m.answer("Ishlatish: /ai USER_ID  (mijoz ID si «to'lov kutilmoqda» xabaridagi ismga bosib ko'rinadi)\n"
+                       "Yoki mijoz chatining o'zida /ai deb yozing.")
+        return
+    await db.set_pause(int(command.args.strip()), 0)
+    await m.answer("✅ Bot shu mijoz bilan yana javob beradi.")
+
+
 @router.message(Command("kutilmoqda"), is_admin)
 async def cmd_awaiting(m: Message):
     orders = await db.awaiting_orders()
@@ -111,12 +122,7 @@ async def cb_adm_no(cb: CallbackQuery, bot: Bot):
     await cb.message.edit_reply_markup(reply_markup=None)
     await cb.message.reply(f"❌ #{oid} cheki rad etildi — {escape(cb.from_user.full_name)}")
     if o and o["status"] == "awaiting_payment":
-        try:
-            await bot.send_message(
-                o["user_id"],
-                f"❌ Chekingiz tasdiqlanmadi: #{oid} bo'yicha {fmt_sum(o['amount'])} so'm to'lov topilmadi.\n"
-                "To'lov summasini tekshiring yoki admin bilan bog'laning.",
-                parse_mode=None,
-            )
-        except Exception:
-            pass
+        await notify_user(
+            bot, o["user_id"],
+            f"❌ Chekingiz tasdiqlanmadi: #{oid} bo'yicha {fmt_sum(o['amount'])} so'm to'lov topilmadi.\n"
+            "To'lov summasini tekshiring yoki admin bilan bog'laning.")

@@ -13,22 +13,23 @@ def footer() -> str:
     return build_footer(CHANNEL_USERNAME, CHANNEL_TITLE, BOT_USERNAME)
 
 
-async def send_ad(bot: Bot, chat_id: int, order: dict) -> list[int]:
-    """Rasmlar albom bo'lib, birinchi rasm tagida bezatilgan matn. Rasm bo'lmasa — oddiy matn."""
+async def send_ad(bot: Bot, chat_id: int, order: dict, **kw) -> list[int]:
+    """Rasmlar albom bo'lib, birinchi rasm tagida bezatilgan matn. Rasm bo'lmasa — oddiy matn.
+    kw — business lichka uchun business_connection_id."""
     photos = order["photos"][:10]
     if not photos:
         caption = build_caption(order["data"], footer(), limit=TEXT_LIMIT)
-        msg = await bot.send_message(chat_id, caption, disable_web_page_preview=True)
+        msg = await bot.send_message(chat_id, caption, disable_web_page_preview=True, **kw)
         return [msg.message_id]
 
     caption = build_caption(order["data"], footer())
     if len(photos) == 1:
-        msg = await bot.send_photo(chat_id, photos[0], caption=caption)
+        msg = await bot.send_photo(chat_id, photos[0], caption=caption, **kw)
         return [msg.message_id]
 
     media = [InputMediaPhoto(media=fid) for fid in photos]
     media[0] = InputMediaPhoto(media=photos[0], caption=caption, parse_mode="HTML")
-    msgs = await bot.send_media_group(chat_id, media)
+    msgs = await bot.send_media_group(chat_id, media, **kw)
     return [m.message_id for m in msgs]
 
 

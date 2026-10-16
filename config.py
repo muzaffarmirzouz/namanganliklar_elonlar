@@ -46,5 +46,9 @@ MAX_PHOTOS = int(os.getenv("MAX_PHOTOS", "10"))
 # 0 = o'chirilmaydi. 24 = e'lon 1 kundan keyin kanaldan o'chiriladi (Telegram 48 soatgacha ruxsat beradi)
 AUTO_DELETE_HOURS = int(os.getenv("AUTO_DELETE_HOURS", "0"))
 
+# --- Telegram Business (lichka) ---
+# Siz mijoz chatiga o'zingiz yozsangiz, bot shu chatda necha soat jim turadi
+BUSINESS_PAUSE_HOURS = int(os.getenv("BUSINESS_PAUSE_HOURS", "12"))
+
 # --- Saqlash ---
 DB_PATH = os.getenv("DB_PATH") or ("/data/elon.db" if os.path.isdir("/data") else "elon.db")
