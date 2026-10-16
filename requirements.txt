@@ -1,0 +1,4 @@
+aiogram>=3.13,<4
+anthropic>=0.40
+aiosqlite>=0.20
+python-dotenv>=1.0
