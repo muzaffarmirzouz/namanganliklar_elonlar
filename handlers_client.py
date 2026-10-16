@@ -319,8 +319,24 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 want_payment = True
                 return ("Bot javobingdan keyin to'lov summasi va Payme silkasini yuboradi. "
                         "Sen silka yoki summa yozma — faqat qisqa minnatdorchilik bildir.")
-            if not o or o["status"] != "draft":
-                return "Hozir qoralamani o'zgartirib bo'lmaydi (to'lov bosqichida yoki e'lon yo'q)."
+            if name == "reset_ad":
+                # Yangi e'lon: joriy qoralama yoki TO'LANMAGAN e'lon yopiladi, to'langani tegilmaydi
+                if o and o["status"] == "paid":
+                    return "Oldingi e'lon to'langan va hozir joylanmoqda — u tugagach yangisini boshlash mumkin."
+                old = ""
+                if o:
+                    old = f" (#{o['id']} {'to‘lanmagan e‘lon' if o['status'] == 'awaiting_payment' else 'qoralama'} yopildi)"
+                    await db.set_status(o["id"], "cancelled")
+                await db.get_or_create_draft(uid)
+                return "Yangi bo'sh qoralama ochildi" + old + ". Endi update_ad bilan ma'lumotlarni saqla."
+            if not o:
+                o = await db.get_or_create_draft(uid)  # e'lon yo'q bo'lsa — yangisini ochamiz
+            if o["status"] == "awaiting_payment":
+                return ("Mijozning #{0} e'loni to'lov kutmoqda, uni o'zgartirib bo'lmaydi. Agar mijoz YANGI e'lon "
+                        "bermoqchi bo'lsa: eski to'lanmagan e'lon bekor bo'lishini aytib, rozi bo'lsa reset_ad chaqir, "
+                        "keyin update_ad.").format(o["id"])
+            if o["status"] != "draft":
+                return "Hozir qoralamani o'zgartirib bo'lmaydi."
             if name == "update_ad":
                 await db.update_data(o["id"], args)
                 await db.set_preview_shown(o["id"], False)
@@ -333,10 +349,6 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 want_preview = True
                 return ("Bot javobingdan keyin tayyor e'lonni yuboradi. Mijozga qisqa qilib: tekshirib, "
                         "to'g'ri bo'lsa tasdiqlashini ayt.")
-            if name == "reset_ad":
-                await db.set_status(o["id"], "cancelled")
-                await db.get_or_create_draft(uid)
-                return "Eski qoralama o'chirildi, yangi bo'sh qoralama ochildi."
             return "Noma'lum asbob."
 
         try:
