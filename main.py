@@ -17,6 +17,7 @@ import handlers_admin  # noqa: E402
 import handlers_client  # noqa: E402
 import handlers_group  # noqa: E402
 import publisher  # noqa: E402
+import userbot  # noqa: E402
 from formatting import fmt_sum  # noqa: E402
 from services import notify_user, to_group  # noqa: E402
 
@@ -69,8 +70,14 @@ async def main():
     # Tartib muhim: admin buyruqlari -> to'lov guruhi -> mijoz chati
     dp.include_routers(handlers_admin.router, handlers_group.router, handlers_client.router)
 
+    try:
+        ub = await userbot.start(bot)  # bo'lmasa None — bot o'zi ishlayveradi
+    except Exception:
+        log.exception("Userbot ishga tushmadi")
+        ub = None
     asyncio.create_task(housekeeping(bot))
-    await to_group(bot, f"🤖 @{me.username} ishga tushdi. E'lon narxi: {fmt_sum(config.AD_PRICE)} so'm.")
+    ub_txt = "\n👁 Userbot: to'lovlar kuzatilmoqda" if ub else "\n⚠️ Userbot ulanmagan — to'lovlar avtomatik tanilmaydi"
+    await to_group(bot, f"🤖 @{me.username} ishga tushdi. E'lon narxi: {fmt_sum(config.AD_PRICE)} so'm.{ub_txt}")
     await bot.delete_webhook(drop_pending_updates=False)
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

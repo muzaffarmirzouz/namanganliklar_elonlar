@@ -50,5 +50,10 @@ AUTO_DELETE_HOURS = int(os.getenv("AUTO_DELETE_HOURS", "0"))
 # Siz mijoz chatiga o'zingiz yozsangiz, bot shu chatda necha soat jim turadi
 BUSINESS_PAUSE_HOURS = int(os.getenv("BUSINESS_PAUSE_HOURS", "12"))
 
+# --- Userbot (Payme guruhini sizning akkauntingiz orqali o'qish) ---
+TG_API_ID = int(os.getenv("TG_API_ID", "0") or 0)
+TG_API_HASH = os.getenv("TG_API_HASH", "")
+TG_SESSION = os.getenv("TG_SESSION", "")
+
 # --- Saqlash ---
 DB_PATH = os.getenv("DB_PATH") or ("/data/elon.db" if os.path.isdir("/data") else "elon.db")
