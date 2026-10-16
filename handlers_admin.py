@@ -22,8 +22,11 @@ async def cmd_id(m: Message):
     if m.reply_to_message and m.reply_to_message.from_user:
         u = m.reply_to_message.from_user
         text += f"\nJavob berilgan xabar egasi: <code>{u.id}</code> ({'bot' if u.is_bot else 'odam'})"
-    if m.forward_origin and getattr(m.forward_origin, "chat", None):
-        text += f"\nForward qilingan kanal: <code>{m.forward_origin.chat.id}</code>"
+    for src in (m, m.reply_to_message):
+        origin = getattr(src, "forward_origin", None) if src else None
+        if origin and getattr(origin, "chat", None):
+            text += f"\nForward qilingan kanal: <code>{origin.chat.id}</code> ({escape(origin.chat.title or '')})"
+            break
     await m.answer(text)
 
 
