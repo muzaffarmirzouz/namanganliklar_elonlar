@@ -21,8 +21,21 @@ router.message.filter(F.chat.id == PAYMENT_GROUP_ID)
 async def on_payment_message(m: Message, bot: Bot):
     if m.from_user and m.from_user.id == bot.id:
         return
-    sender = m.from_user.id if m.from_user else (m.sender_chat.id if m.sender_chat else 0)
-    if PAYMENT_SOURCE_IDS and sender not in (PAYMENT_SOURCE_IDS | ADMIN_IDS):
+    # Xabar kimdan: odam/bot, kanal nomidan yoki boshqa bot orqali (via) — hammasini hisobga olamiz
+    senders = {x for x in (
+        m.from_user.id if m.from_user else None,
+        m.sender_chat.id if m.sender_chat else None,
+        m.via_bot.id if m.via_bot else None,
+    ) if x}
+    log.info("Guruh xabari: from=%s (%s, bot=%s) sender_chat=%s via=%s | %r",
+             m.from_user.id if m.from_user else None,
+             m.from_user.username if m.from_user else None,
+             m.from_user.is_bot if m.from_user else None,
+             m.sender_chat.id if m.sender_chat else None,
+             m.via_bot.id if m.via_bot else None,
+             (m.text or m.caption or "")[:80])
+    if PAYMENT_SOURCE_IDS and not (senders & (PAYMENT_SOURCE_IDS | ADMIN_IDS)):
+        log.info("  -> o'tkazib yuborildi: yuboruvchi %s PAYMENT_SOURCE_IDS da yo'q", senders)
         return  # begona odamning xabari to'lov deb hisoblanmaydi
 
     text = (m.text or m.caption or "").strip()
