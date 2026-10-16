@@ -1,4 +1,5 @@
 """E'lonni kanalga (yoki mijozga oldindan ko'rish uchun) albom qilib yuborish."""
+import os
 from aiogram import Bot
 from aiogram.types import InputMediaPhoto
 
@@ -10,7 +11,9 @@ BOT_USERNAME = ""  # main.py ishga tushganda to'ldiradi
 
 
 def footer() -> str:
-    return build_footer(CHANNEL_USERNAME, CHANNEL_TITLE, BOT_USERNAME)
+    # "E'lon berish:" qatorida ko'rinadigan username (ELON_CONTACT bo'lmasa — botning o'zi)
+    contact = os.getenv("ELON_CONTACT", "").strip().lstrip("@") or BOT_USERNAME
+    return build_footer(CHANNEL_USERNAME, CHANNEL_TITLE, contact)
 
 
 async def send_ad(bot: Bot, chat_id: int, order: dict, **kw) -> list[int]:
