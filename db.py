@@ -284,6 +284,11 @@ async def payment_seen(msg_key: str) -> bool:
     return await cur.fetchone() is not None
 
 
+async def update_payment(msg_key: str, amount: int | None, order_id: int | None) -> None:
+    await _db.execute("UPDATE payments SET amount=?, order_id=? WHERE msg_key=?", (amount, order_id, msg_key))
+    await _db.commit()
+
+
 async def log_payment(msg_key: str, raw: str, amount: int | None, order_id: int | None) -> None:
     await _db.execute(
         "INSERT OR IGNORE INTO payments(msg_key, raw, amount, order_id, created_at) VALUES(?,?,?,?,?)",

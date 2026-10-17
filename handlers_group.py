@@ -5,6 +5,8 @@ Payme xabari ikki yo'l bilan kelishi mumkin:
   • userbot orqali (userbot.py) — bot admin bo'lmagan, Payme ochgan guruhlar uchun.
 Ikkalasi ham process_payment() ga tushadi; bir xabar ikki marta hisoblanmaydi.
 """
+import asyncio
+import hashlib
 import logging
 from html import escape
 
@@ -21,6 +23,7 @@ from services import confirm_and_publish
 log = logging.getLogger(__name__)
 router = Router()
 router.message.filter(F.chat.id == PAYMENT_GROUP_ID)
+_seen_lock = asyncio.Lock()
 
 
 async def reply_in_group(bot: Bot, text: str, reply_to: int | None) -> None:
@@ -44,8 +47,13 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
         return
     if not text or text.startswith("/"):
         return
-    if await db.payment_seen(key):
-        return
+    # Bir xabar ham userbot, ham bot orqali kelishi mumkin; oddiy guruhda ularning xabar raqamlari farq qiladi.
+    # Shuning uchun matn bo'yicha tekshiramiz (Payme xabarida har to'lovning noyob ID si bor).
+    key = "txt:" + hashlib.sha1(" ".join(text.split()).encode()).hexdigest()
+    async with _seen_lock:  # tekshirish va band qilish bitta qadamda — ikki yo'l bir vaqtda kirmasin
+        if await db.payment_seen(key):
+            return
+        await db.log_payment(key, text, None, None)
 
     info = await ai.parse_payment_text(text)
     if info is not None and (not info.get("is_payment") or info.get("incoming") is False):
@@ -54,7 +62,7 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
     ai_amount = info.get("amount") if info else None
     awaiting = await db.awaiting_orders()
     order, why = match_order(text, ai_amount, awaiting)
-    await db.log_payment(key, text, int(ai_amount) if ai_amount else None, order["id"] if order else None)
+    await db.update_payment(key, int(ai_amount) if ai_amount else None, order["id"] if order else None)
 
     if order:
         log.info("To'lov %s -> #%s (%s)", key, order["id"], why)
