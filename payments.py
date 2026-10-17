@@ -3,7 +3,7 @@ import base64
 import random
 import re
 
-from config import (AD_PRICE, PAYME_ACCOUNT_KEY, PAYME_LINK, PAYME_MERCHANT_ID,
+from config import (AD_PRICE, CLICK_LINK, PAYME_ACCOUNT_KEY, PAYME_LINK, PAYME_MERCHANT_ID,
                     UNIQUE_AMOUNT, UNIQUE_MAX_OFFSET)
 
 
@@ -22,6 +22,10 @@ def payme_link(amount: int, order_id: int) -> str:
         params = f"m={PAYME_MERCHANT_ID};ac.{PAYME_ACCOUNT_KEY}={order_id};a={amount * 100}"
         return "https://checkout.paycom.uz/" + base64.b64encode(params.encode()).decode()
     return PAYME_LINK.replace("{amount}", str(amount)).replace("{order_id}", str(order_id))
+
+
+def click_link(amount: int, order_id: int) -> str:
+    return CLICK_LINK.replace("{amount}", str(amount)).replace("{order_id}", str(order_id))
 
 
 _NUM = re.compile(r"\d{1,3}(?:[   .,']\d{3})+(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?")

@@ -27,7 +27,7 @@ from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
 from formatting import fmt_sum, is_service
 from texts import LANG_NAMES, detect_lang, t as tr
-from payments import payme_link, pick_amount
+from payments import click_link, payme_link, pick_amount
 from services import to_group
 
 log = logging.getLogger(__name__)
@@ -356,7 +356,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 lines.append(f"Mijoz e'lonni tasdiqlagan va {fmt_sum(o['amount'])} so'm to'lashi kerak (aynan shu summa). "
                              "Qoralamani endi o'zgartirib bo'lmaydi. To'lov tushgach e'lon avtomatik joylanadi. "
                              "To'lagan bo'lsa-yu joylanmagan bo'lsa — to'lov chekining skrinshotini shu chatga yuborishini ayt. "
-                             "Silkani qayta so'rasa go_to_payment chaqir. "
+                             "Silkani (Payme yoki Click) qayta so'rasa go_to_payment chaqir — bot ikkalasini ham yuboradi. "
                              f"Silka ochilmayapti/ishlamayapti desa: Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» "
                              "deb yozib, o'sha yerdan aynan shu summani to'lashini ayt. "
                              + (f"Click'dan to'lamoqchi bo'lsa: Click ilovasida «{CLICK_SEARCH_NAME}» deb qidirib, aynan shu "
@@ -601,8 +601,13 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
     msgs = [tr("pay_amount", lang, amount=amount) + (tr("pay_exact", lang) if UNIQUE_AMOUNT else "")]
     msgs.append(tr("pay_link", lang, link=link, payme=PAYME_SEARCH_NAME) if link
                 else tr("pay_nolink", lang, payme=PAYME_SEARCH_NAME))
+    clink = click_link(o["amount"], o["id"]) if CLICK_ENABLED else ""
     if CLICK_ENABLED:
-        msgs.append(tr("pay_click_auto" if CLICK_GROUP_ID else "pay_click", lang, click=CLICK_SEARCH_NAME))
+        if clink:
+            msgs.append(tr("pay_click_link" if CLICK_GROUP_ID else "pay_click_link_receipt", lang,
+                           link=clink, click=CLICK_SEARCH_NAME))
+        else:
+            msgs.append(tr("pay_click_auto" if CLICK_GROUP_ID else "pay_click", lang, click=CLICK_SEARCH_NAME))
     msgs.append(tr("pay_after", lang))
 
     if kw:  # business lichka
@@ -612,6 +617,8 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
     rows = []
     if link:
         rows.append([InlineKeyboardButton(text=tr("btn_pay", lang), url=link)])
+    if clink:
+        rows.append([InlineKeyboardButton(text=tr("btn_click", lang), url=clink)])
     rows.append([InlineKeyboardButton(text=tr("btn_cancel", lang), callback_data=f"cancel:{o['id']}")])
     await bot.send_message(uid, "💳 " + "\n\n".join(msgs), parse_mode=None, disable_web_page_preview=True,
                            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
