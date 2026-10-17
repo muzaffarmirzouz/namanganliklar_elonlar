@@ -61,6 +61,15 @@ ISH TARTIBI:
 - Mijoz boshidan boshlamoqchi yoki BOSHQA buyum uchun yangi e'lon bermoqchi bo'lsa reset_ad chaqir, keyin update_ad.
   Agar eski e'lon to'lov kutayotgan bo'lsa, avval "oldingi to'lanmagan e'loningiz bekor bo'ladi, rozimisiz?" deb so'ra.
   Umuman voz kechsa cancel_order chaqir.
+- JOYLANGAN E'LONNI TUZATISH: e'lon kanalga chiqqandan keyin mijoz "xato ketibdi", "narxini o'zgartiring",
+  "telefon noto'g'ri" desa — bu YANGI e'lon emas. Nimani tuzatish kerakligini aniqlab, edit_published chaqir.
+  Qayta to'lov so'rama, update_ad yoki reset_ad chaqirma. Tuzatilgach qisqa ayt: "To'g'irladim, kanalda yangilandi".
+  Mijoz butunlay boshqa buyumni (masalan mashina o'rniga uy) qo'ymoqchi bo'lsa — bu yangi e'lon, odatdagidek pullik.
+  Rasmlarni almashtirish yoki e'lonni o'chirish kerak bo'lsa — notify_admin chaqir va admin tez orada qilishini ayt.
+  Agar mijoz e'loni kanalda turganda rasm yuborsa — avval so'ra: kanaldagi e'longa almashtirishmi yoki yangi e'lonmi.
+  Almashtirish bo'lsa: notify_admin chaqir va cancel_order bilan ortiqcha qoralamani yop.
+- SOTILDI: mijoz buyumi sotilganini aytsa — mark_sold chaqir va qisqa tabrikla ("Tabriklayman! Kanalda sotildi deb belgilab qo'ydim").
+  Sotilgandan keyin yangi e'lon taklif qilma.
 - Asbob xato qaytarsa, mijozga texnik tafsilotni aytma — vaziyatni o'zing tuzat (masalan reset_ad) yoki qisqa savol ber.
 - Javoblarda markdown (**qalin**, # sarlavha) ishlatma — Telegram'da oddiy matn ko'rinadi. Emoji mumkin.
 - Agar mijoz e'longa aloqasi yo'q shaxsiy savol yoki boshqa ish bo'yicha yozsa, qisqa javob berib, admin tez orada
@@ -105,6 +114,37 @@ TOOLS = [
         "description": ("Mijoz ko'rsatilgan tayyor e'lonni aniq tasdiqlasa ('ha', 'to'g'ri', 'joylang', 'да') chaqir. "
                         "Bot to'lov summasi va Payme silkasini o'zi yuboradi. Faqat show_preview dan KEYIN."),
         "input_schema": {"type": "object", "properties": {}},
+    },
+    {
+        "name": "edit_published",
+        "description": ("KANALGA JOYLANGAN e'londagi xatoni tuzatadi (bepul, qayta to'lov yo'q). Faqat o'zgaradigan "
+                        "maydonlarni yubor. Faqat O'SHA buyumning ma'lumotini tuzatish uchun: narx, telefon, manzil, "
+                        "holati, tavsif, imlo xatolari. Boshqa buyum uchun EMAS — bu yangi pullik e'lon."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"}, "price": {"type": "string"}, "location": {"type": "string"},
+                "phone": {"type": "string"}, "telegram": {"type": "string"}, "condition": {"type": "string"},
+                "details": {"type": "array", "items": {"type": "string"},
+                            "description": "To'liq yangi ro'yxat (eskisini almashtiradi)."},
+                "description": {"type": "string"},
+                "order_id": {"type": "integer",
+                             "description": "Mijozning bir nechta e'loni bo'lsa — qaysi biri (ro'yxatdan)."},
+            },
+        },
+    },
+    {
+        "name": "mark_sold",
+        "description": ("Mijoz buyumi SOTILGANINI aytsa ('sotildi', 'sotib bo'ldim', 'продано') — kanaldagi e'longa "
+                        "'✅ SOTILDI' belgisini qo'yadi. Mijozning bir nechta e'loni bo'lsa, qaysi biri ekanini aniqlab "
+                        "order_id ni yubor; bitta bo'lsa order_id shart emas."),
+        "input_schema": {"type": "object", "properties": {"order_id": {"type": "integer"}}},
+    },
+    {
+        "name": "notify_admin",
+        "description": ("Adminga xabar yuboradi: bot o'zi qila olmaydigan narsa (joylangan e'londagi rasmlarni "
+                        "almashtirish, e'lonni o'chirish, pul qaytarish, shikoyat va h.k.)."),
+        "input_schema": {"type": "object", "properties": {"reason": {"type": "string"}}, "required": ["reason"]},
     },
     {
         "name": "cancel_order",

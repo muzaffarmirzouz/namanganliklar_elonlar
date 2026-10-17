@@ -40,7 +40,10 @@ def visible_len(html_text: str) -> int:
 def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> str:
     emoji, tag = CATEGORY_STYLE.get(data.get("category", "boshqa"), CATEGORY_STYLE["boshqa"])
 
-    head = [f"{emoji} <b>#{tag}</b> | #SOTILADI", ""]
+    if data.get("_sold"):
+        head = ["✅✅✅ <b>SOTILDI</b> ✅✅✅", "", f"{emoji} <b>#{tag}</b> | #SOTILDI", ""]
+    else:
+        head = [f"{emoji} <b>#{tag}</b> | #SOTILADI", ""]
     if data.get("title"):
         head.append(f"<b>{_e(str(data['title']).upper())}</b>")
         head.append("")

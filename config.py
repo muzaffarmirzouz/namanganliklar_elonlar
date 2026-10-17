@@ -51,6 +51,12 @@ MAX_PHOTOS = int(os.getenv("MAX_PHOTOS", "10"))
 # 0 = o'chirilmaydi. 24 = e'lon 1 kundan keyin kanaldan o'chiriladi (Telegram 48 soatgacha ruxsat beradi)
 AUTO_DELETE_HOURS = int(os.getenv("AUTO_DELETE_HOURS", "0"))
 
+# Joylangan e'lonni tuzatish: necha kun ichida va necha marta bepul
+EDIT_WINDOW_DAYS = int(os.getenv("EDIT_WINDOW_DAYS", "7"))
+MAX_EDITS = int(os.getenv("MAX_EDITS", "3"))
+# "Sotildi" belgisini necha kun ichida qo'yish mumkin
+SOLD_WINDOW_DAYS = int(os.getenv("SOLD_WINDOW_DAYS", "60"))
+
 # --- Telegram Business (lichka) ---
 # Siz mijoz chatiga o'zingiz yozsangiz, bot shu chatda necha soat jim turadi
 BUSINESS_PAUSE_HOURS = int(os.getenv("BUSINESS_PAUSE_HOURS", "12"))

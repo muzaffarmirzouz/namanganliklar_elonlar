@@ -54,6 +54,11 @@ async def init() -> None:
             await _db.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except aiosqlite.OperationalError:
             pass  # allaqachon bor
+    for col in ("edits INTEGER DEFAULT 0",):
+        try:
+            await _db.execute(f"ALTER TABLE orders ADD COLUMN {col}")
+        except aiosqlite.OperationalError:
+            pass  # allaqachon bor
     await _db.commit()
 
 
@@ -114,6 +119,30 @@ async def last_published(user_id: int) -> dict | None:
         "SELECT * FROM orders WHERE user_id=? AND status='published' ORDER BY published_at DESC LIMIT 1",
         (user_id,))
     return _order(await cur.fetchone())
+
+
+async def editable_published(user_id: int, window_sec: int) -> dict | None:
+    """Mijozning oxirgi joylangan, kanaldan o'chirilmagan va tahrir muddati o'tmagan e'loni."""
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE user_id=? AND status='published' AND deleted=0 AND published_at>=? "
+        "ORDER BY published_at DESC LIMIT 1",
+        (user_id, int(time.time()) - window_sec))
+    return _order(await cur.fetchone())
+
+
+async def recent_published(user_id: int, window_sec: int, limit: int = 5) -> list[dict]:
+    """Mijozning kanalda turgan (o'chirilmagan) so'nggi e'lonlari, yangisi birinchi."""
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE user_id=? AND status='published' AND deleted=0 AND published_at>=? "
+        "ORDER BY published_at DESC LIMIT ?",
+        (user_id, int(time.time()) - window_sec, limit))
+    return [_order(r) for r in await cur.fetchall()]
+
+
+async def save_published_edit(order_id: int, data: dict) -> None:
+    await _db.execute("UPDATE orders SET data=?, edits=COALESCE(edits,0)+1 WHERE id=?",
+                      (json.dumps(data, ensure_ascii=False), order_id))
+    await _db.commit()
 
 
 async def bc_id(user_id: int) -> str | None:

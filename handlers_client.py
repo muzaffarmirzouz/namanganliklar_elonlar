@@ -22,6 +22,7 @@ import ai
 import db
 import publisher
 from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
+                    EDIT_WINDOW_DAYS, MAX_EDITS, SOLD_WINDOW_DAYS,
                     CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
 from formatting import fmt_sum
@@ -287,6 +288,19 @@ async def run_ai(bot: Bot, uid: int, text: str):
             lang_line = (f"MIJOZ TILI: {LANG_NAMES.get(lang, lang)}. Javobni FAQAT shu tilda va shu yozuvda yoz "
                          "(mijozning oxirgi xabariga qarab aniqlangan).")
             o = await db.active_order(uid)
+            ed = await db.editable_published(uid, EDIT_WINDOW_DAYS * 86400)
+            ed_line = ""
+            if ed:
+                left = MAX_EDITS - (ed.get("edits") or 0)
+                ed_data = {k: v for k, v in ed["data"].items() if not k.startswith("_")}
+                ed_line = (f"KANALDAGI E'LON #{ed['id']} (tuzatish mumkin, qolgan bepul tuzatishlar: {max(left, 0)}): "
+                           + json.dumps(ed_data, ensure_ascii=False)
+                           + ". Mijoz undagi xatoni aytsa — edit_published chaqir, yangi e'lon ochma.")
+            live = await db.recent_published(uid, SOLD_WINDOW_DAYS * 86400)
+            if live:
+                items = "; ".join(f"#{x['id']} «{x['data'].get('title', '')}»"
+                                  + (" — SOTILDI belgisi bor" if x["data"].get("_sold") else "") for x in live)
+                ed_line = (ed_line + "\n" if ed_line else "") + "Mijozning kanaldagi e'lonlari (mark_sold uchun): " + items
             if not o:
                 last = await db.last_published(uid)
                 lines = [lang_line, "Faol e'lon yo'q (hozircha qoralama ochilmagan)."]
@@ -294,6 +308,8 @@ async def run_ai(bot: Bot, uid: int, text: str):
                     mins = int((time.time() - (last["published_at"] or 0)) // 60)
                     lines.append(f"Mijozning oxirgi e'loni #{last['id']} «{last['data'].get('title', '')}» "
                                  f"{mins} daqiqa oldin to'langan va kanalga joylangan.")
+                if ed_line:
+                    lines.append(ed_line)
                 lines.append("Agar mijoz shunchaki rahmat/xayr/ok desa — qisqa samimiy javob ber "
                              "(masalan 'Arzimaydi, xaridor tez chiqsin!') va SUHBATNI SHU YERDA TUGAT: "
                              "yangi e'lon taklif qilma, 'yana nima sotasiz' deb so'rama. "
@@ -311,6 +327,8 @@ async def run_ai(bot: Bot, uid: int, text: str):
             ]
             miss = missing_fields(o)
             lines.append("Yetishmayapti: " + (", ".join(miss) if miss else "hech narsa — show_preview chaqirsa bo'ladi"))
+            if ed_line:
+                lines.append(ed_line + " (Joriy qoralama — bu boshqa, yangi e'lon.)")
             if o["status"] == "awaiting_payment":
                 lines.append(f"Mijoz e'lonni tasdiqlagan va {fmt_sum(o['amount'])} so'm to'lashi kerak (aynan shu summa). "
                              "Qoralamani endi o'zgartirib bo'lmaydi. To'lov tushgach e'lon avtomatik joylanadi. "
@@ -327,6 +345,18 @@ async def run_ai(bot: Bot, uid: int, text: str):
         async def on_tool(name: str, args: dict) -> str:
             nonlocal want_preview, want_payment
             o = await db.active_order(uid)
+            if name == "edit_published":
+                return await edit_published(bot, uid, args)
+            if name == "mark_sold":
+                return await mark_sold(bot, uid, args.get("order_id"))
+            if name == "notify_admin":
+                u = await db.get_user(uid) or {}
+                ed = await db.editable_published(uid, EDIT_WINDOW_DAYS * 86400)
+                await to_group(bot, f"🙋 Mijoz yordam so'radi: {escape(str(args.get('reason', '')))[:500]}\n"
+                                    f"👤 <a href=\"tg://user?id={uid}\">{escape(u.get('full_name') or str(uid))}</a>"
+                                    + (f" (@{u['username']})" if u.get("username") else "")
+                                    + (f"\n📌 E'lon: {publisher.post_link(ed['channel_msgs'][0])}" if ed and ed["channel_msgs"] else ""))
+                return "Adminga yuborildi. Mijozga admin tez orada o'zi hal qilishini ayt."
             if name == "cancel_order":
                 return await cancel_active(uid)
             if name == "go_to_payment":
@@ -398,6 +428,83 @@ async def run_ai(bot: Bot, uid: int, text: str):
             await send_preview(bot, uid, o)
         if want_payment and o:
             await start_payment(bot, uid, o)
+
+
+EDITABLE = ("title", "price", "location", "phone", "telegram", "condition", "details", "description")
+FIELD_NAMES = {"title": "sarlavha", "price": "narx", "location": "manzil", "phone": "telefon", "telegram": "telegram",
+               "condition": "holati", "details": "xususiyatlar", "description": "tavsif"}
+
+
+async def edit_published(bot: Bot, uid: int, args: dict) -> str:
+    """Kanaldagi e'lonni tuzatish: bazada yangilaydi, kanal postini tahrirlaydi, guruhga hisobot beradi."""
+    cands = [x for x in await db.recent_published(uid, EDIT_WINDOW_DAYS * 86400) if x["channel_msgs"]]
+    if args.get("order_id"):
+        o = next((x for x in cands if x["id"] == int(args["order_id"])), None)
+    elif len(cands) > 1:
+        return ("Mijozning bir nechta e'loni bor: " + ", ".join(f"#{x['id']} «{x['data'].get('title', '')}»" for x in cands)
+                + ". Qaysi birini tuzatish kerakligini so'ra, keyin order_id bilan chaqir.")
+    else:
+        o = cands[0] if cands else None
+    if not o:
+        return (f"Tuzatsa bo'ladigan e'lon topilmadi (oxirgi {EDIT_WINDOW_DAYS} kunda joylangan e'lon yo'q yoki "
+                "kanaldan o'chirilgan). Kerak bo'lsa notify_admin chaqir.")
+    if (o.get("edits") or 0) >= MAX_EDITS:
+        return f"Bepul tuzatishlar soni ({MAX_EDITS} ta) tugagan. notify_admin chaqirib, adminga yubor."
+    changes = {k: v for k, v in args.items() if k in EDITABLE and v not in (None, "", [])}
+    if not changes:
+        return "Nima o'zgarishi aniq emas — mijozdan so'ra."
+    old_data = dict(o["data"])
+    new_data = {**old_data, **changes}
+    diff = [(k, old_data.get(k), v) for k, v in changes.items() if old_data.get(k) != v]
+    if not diff:
+        return "Bu ma'lumotlar e'londa allaqachon shunday turibdi."
+    o["data"] = new_data
+    try:
+        link = await publisher.edit_post(bot, o)
+    except Exception as e:
+        log.exception("kanal postini tahrirlab bo'lmadi")
+        await to_group(bot, f"❗️ #{o['id']} postini tahrirlab bo'lmadi: <code>{escape(str(e))[:300]}</code>\n"
+                            "Botda kanalda «Xabarlarni tahrirlash» huquqi bormi?")
+        return "Kanal postini hozir tahrirlab bo'lmadi, adminga xabar berildi. Mijozga admin tez orada tuzatishini ayt."
+    await db.save_published_edit(o["id"], new_data)
+
+    def short(v):
+        v = ", ".join(v) if isinstance(v, list) else str(v or "—")
+        return escape(v if len(v) <= 80 else v[:77] + "…")
+    lines = "\n".join(f"• {FIELD_NAMES.get(k, k)}: {short(a)} → <b>{short(b)}</b>" for k, a, b in diff)
+    left = MAX_EDITS - (o.get("edits") or 0) - 1
+    await to_group(bot, f"✏️ #{o['id']} e'lon mijoz so'rovi bilan tuzatildi ({left} ta bepul tuzatish qoldi):\n"
+                        f"{lines}\n{link}")
+    return f"Kanaldagi e'lon yangilandi: {link}. Qolgan bepul tuzatishlar: {left}."
+
+
+async def mark_sold(bot: Bot, uid: int, order_id: int | None) -> str:
+    live = await db.recent_published(uid, SOLD_WINDOW_DAYS * 86400)
+    live = [x for x in live if x["channel_msgs"]]
+    if not live:
+        return "Mijozning kanalda turgan e'loni topilmadi (o'chirilgan yoki juda eski). Kerak bo'lsa notify_admin chaqir."
+    if order_id:
+        o = next((x for x in live if x["id"] == int(order_id)), None)
+        if not o:
+            return "Bu raqamli e'lon mijozniki emas yoki kanalda yo'q. Ro'yxatdan to'g'risini tanla."
+    else:
+        unsold = [x for x in live if not x["data"].get("_sold")]
+        if len(unsold) > 1:
+            return ("Mijozning bir nechta e'loni bor: " + ", ".join(f"#{x['id']} «{x['data'].get('title', '')}»" for x in unsold)
+                    + ". Qaysi biri sotilganini so'ra, keyin order_id bilan chaqir.")
+        o = unsold[0] if unsold else live[0]
+    if o["data"].get("_sold"):
+        return "Bu e'longa SOTILDI belgisi allaqachon qo'yilgan."
+    o["data"]["_sold"] = True
+    try:
+        link = await publisher.edit_post(bot, o)
+    except Exception as e:
+        log.exception("sotildi belgisini qo'yib bo'lmadi")
+        await to_group(bot, f"❗️ #{o['id']} ga «SOTILDI» qo'yib bo'lmadi: <code>{escape(str(e))[:300]}</code>")
+        return "Kanal postini hozir o'zgartirib bo'lmadi, adminga xabar berildi. Mijozga admin tez orada belgilashini ayt."
+    await db.update_data(o["id"], {"_sold": True})
+    await to_group(bot, f"🏷 #{o['id']} «{escape(o['data'].get('title', ''))}» — mijoz SOTILDI dedi, kanalda belgilandi\n{link}")
+    return f"Kanalda SOTILDI deb belgilandi: {link}"
 
 
 async def send_human(bot: Bot, uid: int, text: str, kw: dict, markup=None):
