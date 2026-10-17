@@ -44,6 +44,11 @@ PAYME_SEARCH_NAME = os.getenv("PAYME_SEARCH_NAME", "Namanganliklar")
 # Click: alohida guruh yo'q — mijoz chek skrinshotini yuboradi, admin tasdiqlaydi
 CLICK_ENABLED = os.getenv("CLICK_ENABLED", "1") == "1"
 CLICK_SEARCH_NAME = os.getenv("CLICK_SEARCH_NAME", "Namanganliklar group")
+# Click bildirishnomalari tushadigan guruh. Bot u yerda JIM kuzatadi: hech narsa yozmaydi, buyruqlarga javob bermaydi.
+# Berilsa — Click to'lovi ham Payme kabi avtomatik tasdiqlanadi (chek faqat zaxira yo'l)
+CLICK_GROUP_ID = int(os.getenv("CLICK_GROUP_ID", "0") or 0)
+# Click guruhida kimning xabari to'lov deb hisoblanadi (Click bildirishnoma botining ID si). Bo'sh — hammasi
+CLICK_SOURCE_IDS = _ids(os.getenv("CLICK_SOURCE_IDS", ""))
 PAYMENT_TTL_HOURS = int(os.getenv("PAYMENT_TTL_HOURS", "24"))
 
 # --- E'lon ---

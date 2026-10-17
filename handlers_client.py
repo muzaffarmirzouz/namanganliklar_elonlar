@@ -23,7 +23,7 @@ import db
 import publisher
 from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
                     EDIT_WINDOW_DAYS, MAX_EDITS, SOLD_WINDOW_DAYS,
-                    CLICK_SEARCH_NAME, MAX_PHOTOS,
+                    CLICK_GROUP_ID, CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
 from formatting import fmt_sum, is_service
 from texts import LANG_NAMES, detect_lang, t as tr
@@ -52,7 +52,8 @@ REQUIRED = {"category": "kategoriya", "title": "sarlavha", "price": "narx",
 RULES = (
     f"📌 <b>{escape(CHANNEL_TITLE)}</b> — e'lon berish qoidalari\n\n"
     f"💰 Narxi: <b>{fmt_sum(AD_PRICE)} so'm</b> — 1 ta e'lon, kanalga 1 marta joylanadi.\n"
-    "💳 To'lov: Payme (avtomatik) yoki Click (chek skrinshoti bilan).\n\n"
+    + ("💳 To'lov: Payme yoki Click (ikkalasi ham avtomatik).\n\n" if CLICK_GROUP_ID else
+       "💳 To'lov: Payme (avtomatik) yoki Click (chek skrinshoti bilan).\n\n") +
     "✅ Qabul qilinadi:\n"
     "• <b>sotuv</b> — uy-joy, avtomobil, texnika, telefon, mebel, qurilish mollari, kiyim, chorva va boshqalar;\n"
     "• <b>xizmat ko'rsatish</b> — gilam yuvish, tozalash, santexnik, elektrik, ta'mirlash, yuk tashish, "
@@ -358,10 +359,14 @@ async def run_ai(bot: Bot, uid: int, text: str):
                              "Silkani qayta so'rasa go_to_payment chaqir. "
                              f"Silka ochilmayapti/ishlamayapti desa: Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» "
                              "deb yozib, o'sha yerdan aynan shu summani to'lashini ayt. "
-                             + (f"Click'dan to'lamoqchi bo'lsa: Click ilovasida «{CLICK_SEARCH_NAME}» deb qidirib to'lashini ayt. "
-                                "Mijoz Click'dan to'laganini aytsa yoki 'to'ladim' deb yozsa-yu e'lon chiqmagan bo'lsa — "
-                                "CHEK SKRINSHOTINI so'ra; skrinshotsiz tasdiqlab bo'lmaydi, 'tasdiqlandi' dema. "
-                                "Chek kelgach admin tekshiradi." if CLICK_ENABLED else ""))
+                             + (f"Click'dan to'lamoqchi bo'lsa: Click ilovasida «{CLICK_SEARCH_NAME}» deb qidirib, aynan shu "
+                                "summani to'lashini ayt. "
+                                + ("Click to'lovi ham avtomatik tanib olinadi. Mijoz 'to'ladim' deb yozsa-yu e'lon 10 daqiqada "
+                                   "chiqmagan bo'lsa — chek skrinshotini so'ra. 'Tasdiqlandi' deb o'zing aytma."
+                                   if CLICK_GROUP_ID else
+                                   "Mijoz Click'dan to'laganini aytsa yoki 'to'ladim' deb yozsa-yu e'lon chiqmagan bo'lsa — "
+                                   "CHEK SKRINSHOTINI so'ra; skrinshotsiz tasdiqlab bo'lmaydi, 'tasdiqlandi' dema. "
+                                   "Chek kelgach admin tekshiradi.") if CLICK_ENABLED else ""))
             return "\n".join(lines)
 
         async def on_tool(name: str, args: dict) -> str:
@@ -597,7 +602,7 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
     msgs.append(tr("pay_link", lang, link=link, payme=PAYME_SEARCH_NAME) if link
                 else tr("pay_nolink", lang, payme=PAYME_SEARCH_NAME))
     if CLICK_ENABLED:
-        msgs.append(tr("pay_click", lang, click=CLICK_SEARCH_NAME))
+        msgs.append(tr("pay_click_auto" if CLICK_GROUP_ID else "pay_click", lang, click=CLICK_SEARCH_NAME))
     msgs.append(tr("pay_after", lang))
 
     if kw:  # business lichka

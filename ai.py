@@ -6,7 +6,7 @@ from typing import Awaitable, Callable
 
 from anthropic import AsyncAnthropic
 
-from config import (AD_PRICE, ANTHROPIC_API_KEY, CHANNEL_TITLE, CLAUDE_FAST_MODEL,
+from config import (AD_PRICE, ANTHROPIC_API_KEY, CHANNEL_TITLE, CLAUDE_FAST_MODEL, CLICK_GROUP_ID,
                     CLAUDE_MODEL, MAX_PHOTOS)
 from formatting import CATEGORY_STYLE, fmt_sum
 
@@ -28,7 +28,8 @@ QOIDALAR:
   kazino/bukmeker/stavka, kripto "daromad", qurol, dori-darmon, giyohvand, tamaki/alkogol, 18+, hujjat sotish,
   fol/sehr-jodu, aldov ehtimoli bor narsalar.
 - E'lon narxi: {fmt_sum(AD_PRICE)} so'm (sotuv ham, xizmat ham). 1 ta e'lon kanalga 1 marta joylanadi.
-  To'lov Payme orqali (avtomatik tasdiqlanadi) yoki Click orqali (Click'da faqat CHEK SKRINSHOTI bilan tasdiqlanadi).
+  To'lov Payme yoki Click orqali. {"Ikkalasi ham avtomatik tasdiqlanadi (aynan berilgan summa to'lansa)." if CLICK_GROUP_ID
+  else "Payme avtomatik tasdiqlanadi, Click esa faqat CHEK SKRINSHOTI bilan."}
   To'lov silkasini SEN bermaysan — mijoz oldindan ko'rishni tasdiqlagach bot o'zi yuboradi. O'zingdan karta raqami yoki silka o'ylab topma.
 - TIL: mijoz qaysi tilda va qaysi yozuvda yozsa, AYNAN shunda javob ber:
   lotincha o'zbekcha -> lotincha; kirillcha o'zbekcha (ўзбекча) -> kirillcha o'zbekcha (ў, қ, ғ, ҳ harflari bilan);
@@ -212,7 +213,7 @@ async def agent_turn(history: list, user_text: str, state: Callable[[], Awaitabl
     return final_text
 
 
-PAYMENT_PARSE_PROMPT = """Senga Telegram guruhga tushgan to'lov bildirishnomasi beriladi (Payme yoki bank xabari).
+PAYMENT_PARSE_PROMPT = """Senga Telegram guruhga tushgan to'lov bildirishnomasi beriladi (Payme, Click yoki bank xabari).
 Faqat JSON qaytar, boshqa hech narsa yozma:
 {"is_payment": true/false, "incoming": true/false, "amount": <so'mda son yoki null>}
 - is_payment: bu pul o'tkazmasi haqidagi xabarmi.

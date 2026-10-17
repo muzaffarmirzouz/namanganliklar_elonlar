@@ -7,11 +7,14 @@ from aiogram.filters import Command, CommandObject
 from aiogram.types import CallbackQuery, Message
 
 import db
-from config import ADMIN_IDS
+from config import ADMIN_IDS, PAYMENT_GROUP_ID
 from formatting import fmt_sum
 from services import confirm_and_publish, notify_user, republish
 
 router = Router()
+# Buyruqlar FAQAT bot lichkasida va o'zimizning to'lov guruhida ishlaydi.
+# Boshqa har qanday guruhda (masalan Click xodimlari bor guruh) bot hech qachon hech narsa yozmaydi.
+router.message.filter((F.chat.type == "private") | (F.chat.id == PAYMENT_GROUP_ID))
 is_admin = F.from_user.id.in_(ADMIN_IDS)
 
 
@@ -26,6 +29,11 @@ async def cmd_id(m: Message):
         origin = getattr(src, "forward_origin", None) if src else None
         if origin and getattr(origin, "chat", None):
             text += f"\nForward qilingan kanal: <code>{origin.chat.id}</code> ({escape(origin.chat.title or '')})"
+            break
+        if origin and getattr(origin, "sender_user", None):
+            u = origin.sender_user
+            text += (f"\nForward qilingan xabar egasi: <code>{u.id}</code> "
+                     f"({'bot' if u.is_bot else 'odam'}, {escape(u.full_name or '')})")
             break
     await m.answer(text)
 

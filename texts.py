@@ -75,6 +75,11 @@ T = {
         "uz_cyrl": "Click'дан ҳам бўлади: Click иловасида «{click}» деб қидиринг, шу суммани ташланг. Фақат Click'дан тўласангиз, чекининг скриншотини албатта шу ерга юборинг, чексиз тасдиқлай олмайман",
         "ru": "Можно и через Click: в приложении Click найдите «{click}» и переведите эту сумму. Только если платите через Click, обязательно пришлите сюда скриншот чека — без чека подтвердить не смогу",
     },
+    "pay_click_auto": {
+        "uz_latn": "Click'dan ham bo'ladi: Click ilovasida «{click}» deb qidiring va aynan shu summani tashlang",
+        "uz_cyrl": "Click'дан ҳам бўлади: Click иловасида «{click}» деб қидиринг ва айнан шу суммани ташланг",
+        "ru": "Можно и через Click: в приложении Click найдите «{click}» и переведите именно эту сумму",
+    },
     "pay_after": {
         "uz_latn": "To'lov tushishi bilan e'loningizni kanalga chiqarib yuboraman. Agar 10 daqiqada chiqmasa, to'lov chekining skrinshotini shu yerga tashlab qo'ying",
         "uz_cyrl": "Тўлов тушиши билан эълонингизни каналга чиқариб юбораман. Агар 10 дақиқада чиқмаса, тўлов чекининг скриншотини шу ерга ташлаб қўйинг",

@@ -16,7 +16,8 @@ from aiogram.types import Message, ReplyParameters
 
 import ai
 import db
-from config import AD_PRICE, ADMIN_IDS, PAYMENT_GROUP_ID, PAYMENT_SOURCE_IDS, UNIQUE_MAX_OFFSET
+from config import (AD_PRICE, ADMIN_IDS, CLICK_GROUP_ID, CLICK_SOURCE_IDS, PAYMENT_GROUP_ID,
+                    PAYMENT_SOURCE_IDS, UNIQUE_MAX_OFFSET)
 from formatting import fmt_sum
 from payments import extract_amounts, match_order
 from services import confirm_and_publish
@@ -53,13 +54,20 @@ async def reply_in_group(bot: Bot, text: str, reply_to: int | None) -> None:
 
 
 async def process_payment(bot: Bot, text: str, key: str, senders: set[int], reply_to: int | None,
-                          source: str) -> None:
+                          source: str, click: bool = False, sender_is_bot: bool | None = None) -> None:
+    """click=True — Click guruhidan: u yerga HECH NARSA yozilmaydi, hisobot o'zimizning to'lov guruhiga boradi."""
     text = (text or "").strip()
     if bot.id in senders:
         return  # botning o'z xabari
-    log.info("Guruh xabari [%s]: senders=%s | %r", source, senders, text[:80])
-    if PAYMENT_SOURCE_IDS and not (senders & (PAYMENT_SOURCE_IDS | ADMIN_IDS)):
-        log.info("  -> o'tkazib yuborildi: yuboruvchi %s PAYMENT_SOURCE_IDS da yo'q", senders)
+    log.info("Guruh xabari [%s%s]: senders=%s | %r", "click/" if click else "", source, senders, text[:80])
+    allowed = CLICK_SOURCE_IDS if click else PAYMENT_SOURCE_IDS
+    if click:
+        reply_to = None  # Click guruhidagi xabarga reply qilib bo'lmaydi — u boshqa chat
+    if click and not CLICK_SOURCE_IDS and sender_is_bot is False:
+        log.info("  -> o'tkazib yuborildi: Click guruhida odam yozgan (faqat bot bildirishnomalari hisoblanadi)")
+        return  # Click xodimlarining yozishmasi to'lov deb hisoblanmasin
+    if allowed and not (senders & (allowed | ADMIN_IDS)):
+        log.info("  -> o'tkazib yuborildi: yuboruvchi %s ruxsat etilganlar ro'yxatida yo'q", senders)
         return
     if not text or text.startswith("/"):
         return
@@ -83,8 +91,9 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
     if order:
         log.info("To'lov %s -> #%s (%s)", key, order["id"], why)
         late = order["status"] == "expired"
-        res = await confirm_and_publish(bot, order["id"], f"{source}:{key}", manual=late)
-        await reply_in_group(bot, res + ("\n⏰ (to'lov muddatidan keyin keldi)" if late else ""), reply_to)
+        res = await confirm_and_publish(bot, order["id"], f"{'click' if click else source}:{key}", manual=late)
+        await reply_in_group(bot, ("🔵 Click: " if click else "") + res
+                             + ("\n⏰ (to'lov muddatidan keyin keldi)" if late else ""), reply_to)
         return
 
     if info is None and not ai_amount:
@@ -97,7 +106,7 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
     pending = "\n".join(f"#{o['id']} — {fmt_sum(o['amount'])} so'm" + (" (muddati o'tgan)" if o["status"] == "expired" else "")
                         for o in awaiting[:15]) or "yo'q"
     amount_txt = f"{fmt_sum(ai_amount)} so'm" if ai_amount else "Summa"
-    await reply_in_group(bot, f"⚠️ {amount_txt} tushdi — {escape(why)}.\n"
+    await reply_in_group(bot, ("🔵 Click: " if click else "") + f"⚠️ {amount_txt} tushdi — {escape(why)}.\n"
                               f"Qo'lda tasdiqlash: /tasdiq ID\n\n⏳ Kutilayotganlar:\n{pending}", reply_to)
 
 
@@ -110,3 +119,39 @@ async def on_payment_message(m: Message, bot: Bot):
     ) if x}
     await process_payment(bot, m.text or m.caption or "", f"{m.chat.id}:{m.message_id}",
                           senders, m.message_id, "bot")
+
+
+# ---------- Click guruhi: faqat jim kuzatish ----------
+click_router = Router()
+click_router.message.filter(F.chat.id == CLICK_GROUP_ID)
+
+
+@click_router.message()
+async def on_click_message(m: Message, bot: Bot):
+    """Click guruhidagi HAR QANDAY xabar shu yerda tugaydi — boshqa handlerlarga (masalan /id) o'tmaydi,
+    shuning uchun bot u yerda hech qachon hech narsa yozmaydi."""
+    if not CLICK_GROUP_ID:
+        return
+    senders = {x for x in (
+        m.from_user.id if m.from_user else None,
+        m.sender_chat.id if m.sender_chat else None,
+        m.via_bot.id if m.via_bot else None,
+    ) if x}
+    try:
+        await process_payment(bot, m.text or m.caption or "", f"{m.chat.id}:{m.message_id}",
+                              senders, None, "bot", click=True,
+                              sender_is_bot=bool(m.from_user and m.from_user.is_bot))
+    except Exception:
+        log.exception("Click xabarini qayta ishlashda xato")
+
+
+# ---------- Boshqa guruhlar: faqat logga yozamiz (ID ni bilish uchun), hech narsa javob bermaymiz ----------
+silent_router = Router()
+silent_router.message.filter(F.chat.type.in_({"group", "supergroup"}))
+
+
+@silent_router.message()
+async def on_other_group(m: Message):
+    log.info("Boshqa guruh xabari (bot jim): chat_id=%s «%s» from=%s bot=%s",
+             m.chat.id, m.chat.title, m.from_user.id if m.from_user else None,
+             m.from_user.is_bot if m.from_user else None)

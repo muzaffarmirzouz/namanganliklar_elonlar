@@ -65,7 +65,9 @@ async def main():
 
     dp = Dispatcher()
     # Tartib muhim: admin buyruqlari -> to'lov guruhi -> mijoz chati
-    dp.include_routers(handlers_admin.router, handlers_group.router, handlers_client.router)
+    # Click guruhi birinchi: u yerdagi har qanday xabar jim qayta ishlanadi va boshqa joyga o'tmaydi
+    dp.include_routers(handlers_group.click_router, handlers_admin.router, handlers_group.router,
+                       handlers_client.router, handlers_group.silent_router)
 
     try:
         ub = await userbot.start(bot)  # bo'lmasa None — bot o'zi ishlayveradi
@@ -74,6 +76,9 @@ async def main():
         ub = None
     asyncio.create_task(housekeeping(bot))
     ub_txt = "\n👁 Userbot: to'lovlar kuzatilmoqda" if ub else "\n⚠️ Userbot ulanmagan — to'lovlar avtomatik tanilmaydi"
+    if config.CLICK_GROUP_ID:
+        ub_txt += "\n🔵 Click guruhi jim kuzatilmoqda" + ("" if config.CLICK_SOURCE_IDS else
+                                                          " (⚠️ CLICK_SOURCE_IDS berilmagan)")
     await to_group(bot, f"🤖 @{me.username} ishga tushdi. E'lon narxi: {fmt_sum(config.AD_PRICE)} so'm.{ub_txt}")
     await bot.delete_webhook(drop_pending_updates=False)
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
