@@ -276,7 +276,25 @@ async def awaiting_orders() -> list[dict]:
     return [_order(r) for r in await cur.fetchall()]
 
 
-async def reserved_amounts(window_sec: int = 3 * 86400) -> set[int]:
+LATE_PAYMENT_SEC = 3 * 86400  # muddati o'tgandan keyin ham shu vaqt ichida kelgan to'lov tanilaveradi
+
+
+async def matchable_orders() -> list[dict]:
+    """To'lov xabarini moslash uchun: kutilayotganlar + yaqinda muddati o'tganlar (kech to'lov)."""
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE status='awaiting_payment' OR (status='expired' AND pay_requested_at > ?) "
+        "ORDER BY id", (int(time.time()) - LATE_PAYMENT_SEC,))
+    return [_order(r) for r in await cur.fetchall()]
+
+
+async def recent_expired(user_id: int) -> dict | None:
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE user_id=? AND status='expired' AND pay_requested_at > ? ORDER BY id DESC LIMIT 1",
+        (user_id, int(time.time()) - LATE_PAYMENT_SEC))
+    return _order(await cur.fetchone())
+
+
+async def reserved_amounts(window_sec: int = LATE_PAYMENT_SEC) -> set[int]:
     """Band summalar: kutilayotganlar + yaqinda muddati o'tganlar (kech to'lov boshqa buyurtmaga tushib qolmasin)."""
     cur = await _db.execute(
         "SELECT amount FROM orders WHERE amount IS NOT NULL AND "

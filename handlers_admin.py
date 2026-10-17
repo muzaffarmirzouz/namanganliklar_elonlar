@@ -110,7 +110,10 @@ async def cb_adm_ok(cb: CallbackQuery, bot: Bot):
     oid = int(cb.data.split(":")[1])
     await cb.answer("Tekshirilmoqda…")
     res = await confirm_and_publish(bot, oid, f"admin:{cb.from_user.id}", manual=True)
-    await cb.message.edit_reply_markup(reply_markup=None)
+    try:
+        await cb.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await cb.message.reply(res + f"\n👤 {escape(cb.from_user.full_name)}")
 
 
@@ -122,7 +125,10 @@ async def cb_adm_no(cb: CallbackQuery, bot: Bot):
     oid = int(cb.data.split(":")[1])
     o = await db.get_order(oid)
     await cb.answer("Rad etildi")
-    await cb.message.edit_reply_markup(reply_markup=None)
+    try:
+        await cb.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
     await cb.message.reply(f"❌ #{oid} cheki rad etildi — {escape(cb.from_user.full_name)}")
-    if o and o["status"] == "awaiting_payment":
+    if o and o["status"] in ("awaiting_payment", "expired"):
         await notify_user(bot, o["user_id"], "rejected", amount=fmt_sum(o["amount"]))

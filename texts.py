@@ -102,6 +102,11 @@ T = {
         "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nХаридор тез чиқсин! 🙂",
         "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nУдачной продажи! 🙂",
     },
+    "published_service": {
+        "uz_latn": "Tayyor, e'loningiz kanalda 👇\n{link}\n\nMijozlaringiz ko'p bo'lsin! 🙂",
+        "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nМижозларингиз кўп бўлсин! 🙂",
+        "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nПобольше вам клиентов! 🙂",
+    },
     "publish_delay": {
         "uz_latn": "To'lov tushdi, lekin kanalga chiqarishda biroz kechikish bo'ldi. Tez orada chiqarib qo'yaman 🙏",
         "uz_cyrl": "Тўлов тушди, лекин каналга чиқаришда бироз кечикиш бўлди. Тез орада чиқариб қўяман 🙏",
@@ -131,6 +136,11 @@ T = {
         "uz_latn": "Ma'lumotni matn bilan yozing, rasmlarni esa rasm qilib tashlang 📸",
         "uz_cyrl": "Маълумотни матн билан ёзинг, расмларни эса расм қилиб ташланг 📸",
         "ru": "Пишите информацию текстом, а фото отправляйте как фото 📸",
+    },
+    "ack": {
+        "uz_latn": "Xo'p, tushundim 👍",
+        "uz_cyrl": "Хўп, тушундим 👍",
+        "ru": "Хорошо, понял 👍",
     },
     "tech_error": {
         "uz_latn": "Kechirasiz, hozir biroz uzilish bo'ldi. Bir daqiqadan keyin qayta yozing 🙏",

@@ -7,6 +7,7 @@ Ikkalasi ham process_payment() ga tushadi; bir xabar ikki marta hisoblanmaydi.
 """
 import asyncio
 import hashlib
+import re
 import logging
 from html import escape
 
@@ -15,15 +16,30 @@ from aiogram.types import Message, ReplyParameters
 
 import ai
 import db
-from config import ADMIN_IDS, PAYMENT_GROUP_ID, PAYMENT_SOURCE_IDS
+from config import AD_PRICE, ADMIN_IDS, PAYMENT_GROUP_ID, PAYMENT_SOURCE_IDS, UNIQUE_MAX_OFFSET
 from formatting import fmt_sum
-from payments import match_order
+from payments import extract_amounts, match_order
 from services import confirm_and_publish
 
 log = logging.getLogger(__name__)
 router = Router()
 router.message.filter(F.chat.id == PAYMENT_GROUP_ID)
 _seen_lock = asyncio.Lock()
+
+
+def _to_int(v) -> int | None:
+    """AI summani son, matn ("50 976") yoki kasr ko'rinishida qaytarishi mumkin — butun so'mga keltiramiz."""
+    if v is None or isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return int(round(v)) or None
+    digits = re.sub(r"[^\d.,]", "", str(v)).replace(",", ".")
+    if digits.count(".") > 1 or re.search(r"\.\d{3}$", digits):  # 50.976 yoki 1.250.000 — minglik ajratkich
+        digits = digits.replace(".", "")
+    try:
+        return int(round(float(digits))) or None
+    except ValueError:
+        return None
 
 
 async def reply_in_group(bot: Bot, text: str, reply_to: int | None) -> None:
@@ -59,20 +75,28 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
     if info is not None and (not info.get("is_payment") or info.get("incoming") is False):
         return  # oddiy yozishma yoki chiqim
 
-    ai_amount = info.get("amount") if info else None
-    awaiting = await db.awaiting_orders()
+    ai_amount = _to_int(info.get("amount")) if info else None
+    awaiting = await db.matchable_orders()  # kutilayotganlar + muddati yaqinda o'tganlar
     order, why = match_order(text, ai_amount, awaiting)
-    await db.update_payment(key, int(ai_amount) if ai_amount else None, order["id"] if order else None)
+    await db.update_payment(key, ai_amount, order["id"] if order else None)
 
     if order:
         log.info("To'lov %s -> #%s (%s)", key, order["id"], why)
-        await reply_in_group(bot, await confirm_and_publish(bot, order["id"], f"{source}:{key}"), reply_to)
+        late = order["status"] == "expired"
+        res = await confirm_and_publish(bot, order["id"], f"{source}:{key}", manual=late)
+        await reply_in_group(bot, res + ("\n⏰ (to'lov muddatidan keyin keldi)" if late else ""), reply_to)
         return
 
     if info is None and not ai_amount:
-        return  # AI ishlamadi va summa ham topilmadi — shovqin qilmaymiz
-    pending = "\n".join(f"#{o['id']} — {fmt_sum(o['amount'])} so'm" for o in awaiting[:15]) or "yo'q"
-    amount_txt = f"{fmt_sum(int(ai_amount))} so'm" if ai_amount else "Summa"
+        # AI ishlamadi. Matnda e'lon narxiga yaqin summa bo'lsa — to'lov bo'lishi mumkin, jim qolmaymiz
+        near = sorted(a for a in extract_amounts(text) if AD_PRICE <= a <= AD_PRICE + UNIQUE_MAX_OFFSET)
+        if not near:
+            return
+        ai_amount = near[0]
+        why = "AI xabarni o'qiy olmadi, summa matndan topildi, lekin mos buyurtma yo'q"
+    pending = "\n".join(f"#{o['id']} — {fmt_sum(o['amount'])} so'm" + (" (muddati o'tgan)" if o["status"] == "expired" else "")
+                        for o in awaiting[:15]) or "yo'q"
+    amount_txt = f"{fmt_sum(ai_amount)} so'm" if ai_amount else "Summa"
     await reply_in_group(bot, f"⚠️ {amount_txt} tushdi — {escape(why)}.\n"
                               f"Qo'lda tasdiqlash: /tasdiq ID\n\n⏳ Kutilayotganlar:\n{pending}", reply_to)
 

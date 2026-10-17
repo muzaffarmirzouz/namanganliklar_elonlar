@@ -47,3 +47,19 @@ async def publish(bot: Bot, order: dict) -> str:
     ids = await send_ad(bot, CHANNEL_ID, order)
     await db.mark_published(order["id"], ids)
     return post_link(ids[0])
+
+
+async def edit_post(bot: Bot, order: dict) -> str:
+    """Kanaldagi postning matnini yangilaydi (rasmlar o'zgarmaydi). Qaytaradi: post silkasi."""
+    msg_id = order["channel_msgs"][0]  # albomda izoh birinchi rasmda turadi
+    try:
+        if order["photos"]:
+            await bot.edit_message_caption(chat_id=CHANNEL_ID, message_id=msg_id,
+                                           caption=build_caption(order["data"], footer()))
+        else:
+            await bot.edit_message_text(build_caption(order["data"], footer(), limit=TEXT_LIMIT),
+                                        chat_id=CHANNEL_ID, message_id=msg_id, disable_web_page_preview=True)
+    except Exception as e:
+        if "not modified" not in str(e).lower():  # matn o'zgarmagan bo'lsa — xato emas
+            raise
+    return post_link(msg_id)

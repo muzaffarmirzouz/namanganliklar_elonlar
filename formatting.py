@@ -21,7 +21,22 @@ CATEGORY_STYLE = {
     "chorva":     ("🐄", "CHORVA"),
     "uskuna":     ("🛠", "USKUNA"),
     "boshqa":     ("📦", "BOSHQA"),
+    # --- Xizmat ko'rsatish ---
+    "xizmat_tozalash":  ("🧹", "TOZALASH_XIZMATI"),     # gilam yuvish, uy/ofis tozalash, kimyoviy tozalash
+    "xizmat_usta":      ("🔧", "USTA_XIZMATI"),         # santexnik, elektrik, maishiy texnika ta'miri
+    "xizmat_qurilish":  ("🏗", "QURILISH_TAMIRLASH"),   # remont, kafel, gipsokarton, payvand
+    "xizmat_transport": ("🚚", "YUK_TASHISH"),          # yuk tashish, ko'chish, evakuator
+    "xizmat_avto":      ("🚘", "AVTO_XIZMAT"),          # avtoservis, vulkanizatsiya, avtoyuvish
+    "xizmat_gozallik":  ("💇", "GOZALLIK_XIZMATI"),     # sartarosh, manikyur, kosmetolog
+    "xizmat_talim":     ("📚", "TALIM_REPETITOR"),      # repetitor, til kurslari (oflayn)
+    "xizmat_tadbir":    ("🎉", "TADBIR_XIZMATI"),       # to'y, foto/video, oshpaz, dekor
+    "xizmat_boshqa":    ("🤝", "XIZMAT"),
 }
+
+
+def is_service(data: dict) -> bool:
+    return str(data.get("category", "")).startswith("xizmat_")
+
 
 CAPTION_LIMIT = 1024  # Telegram rasm izohi chegarasi
 TEXT_LIMIT = 4096
@@ -40,10 +55,11 @@ def visible_len(html_text: str) -> int:
 def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> str:
     emoji, tag = CATEGORY_STYLE.get(data.get("category", "boshqa"), CATEGORY_STYLE["boshqa"])
 
-    if data.get("_sold"):
+    service = is_service(data)
+    if data.get("_sold") and not service:
         head = ["✅✅✅ <b>SOTILDI</b> ✅✅✅", "", f"{emoji} <b>#{tag}</b> | #SOTILDI", ""]
     else:
-        head = [f"{emoji} <b>#{tag}</b> | #SOTILADI", ""]
+        head = [f"{emoji} <b>#{tag}</b> | {'#XIZMAT' if service else '#SOTILADI'}", ""]
     if data.get("title"):
         head.append(f"<b>{_e(str(data['title']).upper())}</b>")
         head.append("")
@@ -52,8 +68,8 @@ def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> s
     if data.get("price"):
         info.append(f"💰 <b>Narxi:</b> {_e(data['price'])}")
     if data.get("location"):
-        info.append(f"📍 <b>Manzil:</b> {_e(data['location'])}")
-    if data.get("condition"):
+        info.append(f"📍 <b>{'Hudud' if service else 'Manzil'}:</b> {_e(data['location'])}")
+    if data.get("condition") and not service:
         info.append(f"✨ <b>Holati:</b> {_e(data['condition'])}")
     for line in data.get("details") or []:
         info.append(f"▫️ {_e(line)}")

@@ -7,7 +7,7 @@ from aiogram import Bot
 import db
 import publisher
 from config import PAYMENT_GROUP_ID
-from formatting import fmt_sum
+from formatting import fmt_sum, is_service
 from texts import t
 
 log = logging.getLogger(__name__)
@@ -30,7 +30,7 @@ async def confirm_and_publish(bot: Bot, order_id: int, paid_by: str, manual: boo
         return (f"❗️ #{order_id} to'langan, lekin kanalga joylanmadi: {escape(str(e))}\n"
                 f"Qayta urinish: /joyla {order_id}")
 
-    await notify_user(bot, order["user_id"], "published", link=link)
+    await notify_user(bot, order["user_id"], "published_service" if is_service(order["data"]) else "published", link=link)
     # Suhbatni tozalamaymiz — AI e'lon joylanganini bilsin ("rahmat"ga to'g'ri javob bersin)
     await db.add_history_note(order["user_id"],
                               f"[Tizim: #{order_id} e'lon to'landi va kanalga joylandi: {link}. Mijozga xabar berildi.]")
@@ -42,18 +42,28 @@ async def republish(bot: Bot, order_id: int) -> str:
     if not order or order["status"] != "paid":
         return "Faqat to'langan, lekin joylanmagan buyurtmani qayta joylash mumkin."
     link = await publisher.publish(bot, order)
-    await notify_user(bot, order["user_id"], "published", link=link)
+    await notify_user(bot, order["user_id"], "published_service" if is_service(order["data"]) else "published", link=link)
+    await db.add_history_note(order["user_id"], f"[Tizim: #{order_id} e'lon kanalga joylandi: {link}.]")
     return f"✅ #{order_id} joylandi: {link}"
 
 
 async def notify_user(bot: Bot, user_id: int, key: str, **fmt) -> None:
     """Mijozga tayyor xabar — u oxirgi marta qaysi tilda yozgan bo'lsa, o'sha tilda."""
     text = t(key, await db.get_lang(user_id), **fmt)
+    kw = await db.send_kw(user_id)
     try:
-        await bot.send_message(user_id, text, parse_mode=None, disable_web_page_preview=True,
-                               **await db.send_kw(user_id))
-    except Exception:
-        log.warning("user %s ga yozib bo'lmadi", user_id)
+        await bot.send_message(user_id, text, parse_mode=None, disable_web_page_preview=True, **kw)
+        return
+    except Exception as e:
+        log.warning("user %s ga yozib bo'lmadi (%s)", user_id, e)
+    if kw:  # business ulanishi uzilgan bo'lishi mumkin — mijoz botni ochgan bo'lsa, bot chatiga yozamiz
+        try:
+            await bot.send_message(user_id, text, parse_mode=None, disable_web_page_preview=True)
+            return
+        except Exception:
+            pass
+    await to_group(bot, f"📵 Mijozga xabar yetmadi (<a href=\"tg://user?id={user_id}\">{user_id}</a>): "
+                        f"{escape(text[:300])}\nUnga o'zingiz yozib qo'ying.")
 
 
 async def to_group(bot: Bot, text: str, **kw) -> None:
