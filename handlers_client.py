@@ -25,6 +25,7 @@ from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE
                     CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
 from formatting import fmt_sum
+from texts import LANG_NAMES, detect_lang, t as tr
 from payments import payme_link, pick_amount
 from services import to_group
 
@@ -215,7 +216,7 @@ async def on_photo(m: Message, bot: Bot):
         await forward_receipt(bot, m, o)
         return
     if o and o["status"] == "paid":
-        await bot.send_message(uid, "To'lovingiz qabul qilingan, e'lon joylanmoqda 🙏", **kw)
+        await bot.send_message(uid, tr("paid_wait", await db.get_lang(uid)), **kw)
         return
 
     file_id = m.photo[-1].file_id  # eng katta o'lcham
@@ -224,7 +225,7 @@ async def on_photo(m: Message, bot: Bot):
         photos = o["photos"]
         if len(photos) >= MAX_PHOTOS:
             if m.media_group_id is None or uid not in _album_timers:
-                await bot.send_message(uid, f"Ko'pi bilan {MAX_PHOTOS} ta rasm qabul qilinadi.", **kw)
+                await bot.send_message(uid, tr("too_many_photos", await db.get_lang(uid), n=MAX_PHOTOS), **kw)
             return
         photos.append(file_id)
         await db.set_photos(o["id"], photos)
@@ -252,6 +253,7 @@ async def _flush_photos(bot: Bot, uid: int):
     note = f"[Tizim: mijoz rasm yubordi. Jami rasmlar: {len(o['photos'])} ta, maksimum {MAX_PHOTOS}.]"
     if captions:
         note += "\nRasm izohi: " + " ".join(captions)
+        await db.set_lang(uid, detect_lang(" ".join(captions), await db.get_lang(uid)))
     await run_ai(bot, uid, note)
 
 
@@ -259,33 +261,47 @@ async def _flush_photos(bot: Bot, uid: int):
 @router.message(F.text)
 async def on_text(m: Message, bot: Bot):
     await remember(m)
-    await run_ai(bot, m.from_user.id, m.text[:2000])
+    uid = m.from_user.id
+    await db.set_lang(uid, detect_lang(m.text, await db.get_lang(uid)))
+    await run_ai(bot, uid, m.text[:2000])
 
 
 @router.message()
 async def on_other(m: Message, bot: Bot):
     await remember(m)
     if m.video or m.video_note or m.voice or m.document or m.sticker or m.audio:
-        await bot.send_message(m.from_user.id,
-                               "Iltimos, ma'lumotni matn bilan yozing va rasmlarni rasm (photo) ko'rinishida yuboring 📸",
-                               **await db.send_kw(m.from_user.id))
+        uid = m.from_user.id
+        await bot.send_message(uid, tr("other_media", await db.get_lang(uid)), **await db.send_kw(uid))
 
 
 async def run_ai(bot: Bot, uid: int, text: str):
     async with _ai_locks[uid]:
         kw = await db.send_kw(uid)
         business = bool(kw)
-        await db.get_or_create_draft(uid)
+        lang = await db.get_lang(uid)
         history = await db.get_history(uid)
         want_preview = False
         want_payment = False
 
         async def state() -> str:
+            lang_line = (f"MIJOZ TILI: {LANG_NAMES.get(lang, lang)}. Javobni FAQAT shu tilda va shu yozuvda yoz "
+                         "(mijozning oxirgi xabariga qarab aniqlangan).")
             o = await db.active_order(uid)
             if not o:
-                return "Faol e'lon yo'q."
+                last = await db.last_published(uid)
+                lines = [lang_line, "Faol e'lon yo'q (hozircha qoralama ochilmagan)."]
+                if last:
+                    mins = int((time.time() - (last["published_at"] or 0)) // 60)
+                    lines.append(f"Mijozning oxirgi e'loni #{last['id']} «{last['data'].get('title', '')}» "
+                                 f"{mins} daqiqa oldin to'langan va kanalga joylangan.")
+                lines.append("Agar mijoz shunchaki rahmat/xayr/ok desa — qisqa samimiy javob ber "
+                             "(masalan 'Arzimaydi, xaridor tez chiqsin!') va SUHBATNI SHU YERDA TUGAT: "
+                             "yangi e'lon taklif qilma, 'yana nima sotasiz' deb so'rama. "
+                             "Faqat mijoz o'zi yangi narsa sotmoqchi bo'lsa yoki savol bersa — davom et.")
+                return "\n".join(lines)
             data = {k: v for k, v in o["data"].items() if not k.startswith("_")}
             lines = [
+                lang_line,
                 "Kanal: " + ("Telegram lichka (siz kanal egasi nomidan yozyapsiz, tugmalar YO'Q — "
                              "mijoz hammasini yozib javob beradi)" if business else "bot chati (tugmalar bor)"),
                 f"Buyurtma #{o['id']}, holati: {o['status']}",
@@ -368,8 +384,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
             log.exception("AI xatosi")
             await to_group(bot, f"⚠️ AI xatosi (mijoz <code>{uid}</code>):\n<code>{escape(type(e).__name__)}: "
                                 f"{escape(str(e))[:700]}</code>")
-            await bot.send_message(uid, "Kechirasiz, hozir texnik nosozlik bor. Bir daqiqadan keyin qayta yozing 🙏",
-                                   parse_mode=None, **kw)
+            await bot.send_message(uid, tr("tech_error", lang), parse_mode=None, **kw)
             return
 
         history += [{"role": "user", "content": text},
@@ -412,8 +427,7 @@ async def send_preview(bot: Bot, uid: int, order: dict):
     await publisher.send_ad(bot, uid, order, **kw)
     await db.set_preview_shown(order["id"], True)
     if kw:  # business lichka — tugmasiz, odamdek
-        await send_human(bot, uid, f"Kanalda shunaqa chiqadi. Hammasi to'g'rimi? To'g'ri bo'lsa «ha» deb yozing, "
-                                   f"to'g'irlash kerak bo'lsa ayting\n\nE'lon narxi {fmt_sum(AD_PRICE)} so'm", kw)
+        await send_human(bot, uid, tr("preview_ask", await db.get_lang(uid), price=fmt_sum(AD_PRICE)), kw)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Hammasi to'g'ri — to'lovga o'tish", callback_data=f"ok:{order['id']}")],
@@ -440,45 +454,31 @@ async def start_payment(bot: Bot, uid: int, o: dict):
 
 
 async def send_payment_message(bot: Bot, uid: int, o: dict):
+    """To'lov ma'lumoti mijoz tilida. Lichkada — bo'lib-bo'lib, odamdek; bot chatida — bitta xabar + tugmalar."""
     kw = await db.send_kw(uid)
+    lang = await db.get_lang(uid)
     link = payme_link(o["amount"], o["id"])
-    exact = ("❗️ <b>Aynan shu summani</b> to'lang (so'mi bilan) — tizim to'lovingizni summa orqali avtomatik taniydi.\n"
-             if UNIQUE_AMOUNT else "")
-    text = (f"💳 <b>To'lov</b> — e'lon #{o['id']}\n\n"
-            f"Summa: <b>{fmt_sum(o['amount'])} so'm</b>\n{exact}")
-    if kw and link:
-        text += f"\n👉 Payme orqali to'lash: {link}\n"
-    text += (f"\n📱 Silka ochilmasa: Payme ilovasida qidiruvga <b>«{escape(PAYME_SEARCH_NAME)}»</b> deb yozing "
-             "va o'sha yerdan to'lang.\n")
+    amount = fmt_sum(o["amount"])
+    msgs = [tr("pay_amount", lang, amount=amount) + (tr("pay_exact", lang) if UNIQUE_AMOUNT else "")]
+    if kw or not link:  # bot chatida silka tugmada bo'ladi
+        msgs.append(tr("pay_link", lang, link=link, payme=PAYME_SEARCH_NAME) if link
+                    else tr("pay_nolink", lang, payme=PAYME_SEARCH_NAME))
+    else:
+        msgs.append(tr("pay_nolink", lang, payme=PAYME_SEARCH_NAME))
     if CLICK_ENABLED:
-        text += (f"\n🔵 <b>Click orqali:</b> Click ilovasida <b>«{escape(CLICK_SEARCH_NAME)}»</b> deb qidiring, shu summani "
-                 "to'lang va <b>chek skrinshotini albatta shu yerga yuboring</b> — Click to'lovi faqat chek bilan tasdiqlanadi.\n")
-    text += ("\nTo'lov tushishi bilan e'loningiz avtomatik kanalga joylanadi (odatda 1-2 daqiqa).\n"
-             "10 daqiqada joylanmasa — to'lov chekining skrinshotini shu yerga yuboring.\n\n"
-             f"⏳ To'lov {PAYMENT_TTL_HOURS} soat ichida qilinishi kerak.")
-    if not link:
-        text += "\n\n⚠️ To'lov silkasi sozlanmagan, admin bilan bog'laning."
-    if kw:  # business lichka — odamdek, bo'lib-bo'lib
-        exact_h = "Aynan shu summani tashlang, so'migacha, shunda to'lovingiz avtomatik taniladi. " if UNIQUE_AMOUNT else ""
-        msg1 = f"Unda to'lovni qilib qo'ying: {fmt_sum(o['amount'])} so'm. {exact_h}"
-        msg2 = (f"Payme orqali: {link}\n\nAgar silka ochilmasa, Payme ilovasiga kirib qidiruvga "
-                f"«{PAYME_SEARCH_NAME}» deb yozing, o'sha yerdan to'lasangiz ham bo'ladi") if link else \
-               f"Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» deb yozing va o'sha yerdan to'lang"
-        msg3 = ("To'lov tushishi bilan e'loningizni kanalga chiqarib yuboraman. "
-                "Agar 10 daqiqada chiqmasa, to'lov chekining skrinshotini shu yerga tashlab qo'ying")
-        await send_human(bot, uid, msg1, kw)
-        await send_human(bot, uid, msg2, kw)
-        if CLICK_ENABLED:
-            await send_human(bot, uid, f"Click'dan ham bo'ladi: Click ilovasida «{CLICK_SEARCH_NAME}» deb qidiring, "
-                                       f"shu summani tashlang. Faqat Click'dan to'lasangiz, chekining skrinshotini "
-                                       f"albatta shu yerga yuboring, cheksiz tasdiqlay olmayman", kw)
-        await send_human(bot, uid, msg3, kw)
+        msgs.append(tr("pay_click", lang, click=CLICK_SEARCH_NAME))
+    msgs.append(tr("pay_after", lang))
+
+    if kw:  # business lichka
+        for msg in msgs:
+            await send_human(bot, uid, msg, kw)
         return
     rows = []
     if link:
-        rows.append([InlineKeyboardButton(text="💳 Payme orqali to'lash", url=link)])
-    rows.append([InlineKeyboardButton(text="❌ E'lonni bekor qilish", callback_data=f"cancel:{o['id']}")])
-    await bot.send_message(uid, text, reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+        rows.append([InlineKeyboardButton(text=tr("btn_pay", lang), url=link)])
+    rows.append([InlineKeyboardButton(text=tr("btn_cancel", lang), callback_data=f"cancel:{o['id']}")])
+    await bot.send_message(uid, "💳 " + "\n\n".join(msgs), parse_mode=None, disable_web_page_preview=True,
+                           reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
 @router.callback_query(F.data.startswith("ok:"))
@@ -557,8 +557,7 @@ async def forward_receipt(bot: Bot, m: Message, o: dict):
                    + ("\n👉 Click ilovangizdan tushganini tekshiring" if svc.lower() == "click" else ""))
     elif info is not None:
         # Aniq chek emas — guruhni band qilmaymiz, mijozdan qayta so'raymiz
-        await send_human(bot, user.id, "Bu rasm to'lov chekiga o'xshamadi. To'lov qilgan bo'lsangiz, "
-                                       "Payme yoki Click'dagi chekning skrinshotini tashlang", await db.send_kw(user.id))
+        await send_human(bot, user.id, tr("receipt_bad", await db.get_lang(user.id)), await db.send_kw(user.id))
         return
     caption = (f"🧾 <b>Chek</b> — e'lon #{o['id']}\n"
                f"Kutilgan summa: <b>{fmt_sum(o['amount'])} so'm</b>\n"
@@ -567,5 +566,5 @@ async def forward_receipt(bot: Bot, m: Message, o: dict):
                + ("\n💬 Business lichka orqali" if m.business_connection_id else "")
                + ai_line)[:1024]
     await bot.send_photo(PAYMENT_GROUP_ID, m.photo[-1].file_id, caption=caption, reply_markup=kb)
-    await bot.send_message(user.id, "Chekni oldim, tekshirib e'loningizni chiqarib yuboraman 👍",
+    await bot.send_message(user.id, tr("receipt_got", await db.get_lang(user.id)),
                            **await db.send_kw(user.id))

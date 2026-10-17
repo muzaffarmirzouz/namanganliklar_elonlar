@@ -49,7 +49,7 @@ async def init() -> None:
         """
     )
     # Business rejimi uchun ustunlar (eski bazaga ham qo'shiladi)
-    for col in ("bc_id TEXT", "paused_until INTEGER DEFAULT 0"):
+    for col in ("bc_id TEXT", "paused_until INTEGER DEFAULT 0", "lang TEXT DEFAULT 'uz_latn'"):
         try:
             await _db.execute(f"ALTER TABLE users ADD COLUMN {col}")
         except aiosqlite.OperationalError:
@@ -84,6 +84,36 @@ async def get_user(user_id: int) -> dict | None:
     cur = await _db.execute("SELECT user_id, username, full_name, bc_id FROM users WHERE user_id=?", (user_id,))
     row = await cur.fetchone()
     return dict(row) if row else None
+
+
+async def get_lang(user_id: int) -> str:
+    cur = await _db.execute("SELECT lang FROM users WHERE user_id=?", (user_id,))
+    row = await cur.fetchone()
+    return (row["lang"] if row and row["lang"] else "uz_latn")
+
+
+async def set_lang(user_id: int, lang: str) -> None:
+    await _db.execute("UPDATE users SET lang=? WHERE user_id=?", (lang, user_id))
+    await _db.commit()
+
+
+async def add_history_note(user_id: int, note: str) -> None:
+    """Suhbat tarixiga tizim eslatmasini qo'shadi (masalan: e'lon joylandi) — AI kontekstni yo'qotmasin."""
+    history = await get_history(user_id)
+    if not history:
+        return
+    if history[-1]["role"] == "assistant":
+        history[-1]["content"] = f"{history[-1]['content']}\n\n{note}"
+    else:
+        history.append({"role": "assistant", "content": note})
+    await save_history(user_id, history)
+
+
+async def last_published(user_id: int) -> dict | None:
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE user_id=? AND status='published' ORDER BY published_at DESC LIMIT 1",
+        (user_id,))
+    return _order(await cur.fetchone())
 
 
 async def bc_id(user_id: int) -> str | None:

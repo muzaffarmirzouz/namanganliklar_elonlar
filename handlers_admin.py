@@ -125,7 +125,4 @@ async def cb_adm_no(cb: CallbackQuery, bot: Bot):
     await cb.message.edit_reply_markup(reply_markup=None)
     await cb.message.reply(f"❌ #{oid} cheki rad etildi — {escape(cb.from_user.full_name)}")
     if o and o["status"] == "awaiting_payment":
-        await notify_user(
-            bot, o["user_id"],
-            f"❌ Chekingiz tasdiqlanmadi: #{oid} bo'yicha {fmt_sum(o['amount'])} so'm to'lov topilmadi.\n"
-            "To'lov summasini tekshiring yoki admin bilan bog'laning.")
+        await notify_user(bot, o["user_id"], "rejected", amount=fmt_sum(o["amount"]))

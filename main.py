@@ -42,10 +42,7 @@ async def housekeeping(bot: Bot):
         try:
             for o in await db.expired_awaiting(config.PAYMENT_TTL_HOURS * 3600):
                 await db.set_status(o["id"], "expired")
-                await notify_user(
-                    bot, o["user_id"],
-                    f"⌛️ #{o['id']} e'lon uchun to'lov muddati tugadi ({fmt_sum(o['amount'])} so'm). "
-                    "Agar to'lagan bo'lsangiz, chekni shu yerga yuboring. Yangi e'lon uchun yana yozing.")
+                await notify_user(bot, o["user_id"], "expired", id=o["id"], amount=fmt_sum(o["amount"]))
             if config.AUTO_DELETE_HOURS > 0:
                 for o in await db.to_autodelete(config.AUTO_DELETE_HOURS * 3600):
                     try:

@@ -8,6 +8,7 @@ import db
 import publisher
 from config import PAYMENT_GROUP_ID
 from formatting import fmt_sum
+from texts import t
 
 log = logging.getLogger(__name__)
 
@@ -20,21 +21,19 @@ async def confirm_and_publish(bot: Bot, order_id: int, paid_by: str, manual: boo
         return f"⚠️ #{order_id} buyurtma tasdiqlanmadi (holati: {st})."
 
     order = await db.get_order(order_id)
-    await notify_user(bot, order["user_id"],
-                       "To'lov tushdi, rahmat! Hozir kanalga chiqaraman")
+    await notify_user(bot, order["user_id"], "paid")
     try:
         link = await publisher.publish(bot, order)
     except Exception as e:
         log.exception("publish failed")
-        await notify_user(bot, order["user_id"],
-                           "To'lov tushdi, lekin kanalga chiqarishda biroz kechikish bo'ldi. Tez orada chiqarib qo'yaman 🙏")
+        await notify_user(bot, order["user_id"], "publish_delay")
         return (f"❗️ #{order_id} to'langan, lekin kanalga joylanmadi: {escape(str(e))}\n"
                 f"Qayta urinish: /joyla {order_id}")
 
-    await notify_user(bot, order["user_id"],
-                       f"Tayyor, e'loningiz kanalda 👇\n{link}\n\n"
-                       "Xaridor chiqishini tilayman! Yana biror narsa sotmoqchi bo'lsangiz, yozavering")
-    await db.save_history(order["user_id"], [])  # keyingi e'lon toza suhbatdan boshlansin
+    await notify_user(bot, order["user_id"], "published", link=link)
+    # Suhbatni tozalamaymiz — AI e'lon joylanganini bilsin ("rahmat"ga to'g'ri javob bersin)
+    await db.add_history_note(order["user_id"],
+                              f"[Tizim: #{order_id} e'lon to'landi va kanalga joylandi: {link}. Mijozga xabar berildi.]")
     return f"✅ #{order_id} — {fmt_sum(order['amount'])} so'm tasdiqlandi va joylandi: {link}"
 
 
@@ -43,11 +42,13 @@ async def republish(bot: Bot, order_id: int) -> str:
     if not order or order["status"] != "paid":
         return "Faqat to'langan, lekin joylanmagan buyurtmani qayta joylash mumkin."
     link = await publisher.publish(bot, order)
-    await notify_user(bot, order["user_id"], f"Tayyor, e'loningiz kanalda 👇\n{link}")
+    await notify_user(bot, order["user_id"], "published", link=link)
     return f"✅ #{order_id} joylandi: {link}"
 
 
-async def notify_user(bot: Bot, user_id: int, text: str) -> None:
+async def notify_user(bot: Bot, user_id: int, key: str, **fmt) -> None:
+    """Mijozga tayyor xabar — u oxirgi marta qaysi tilda yozgan bo'lsa, o'sha tilda."""
+    text = t(key, await db.get_lang(user_id), **fmt)
     try:
         await bot.send_message(user_id, text, parse_mode=None, disable_web_page_preview=True,
                                **await db.send_kw(user_id))
