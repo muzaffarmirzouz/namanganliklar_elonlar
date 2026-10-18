@@ -63,6 +63,23 @@ async def main():
     publisher.BOT_USERNAME = me.username
     log.info("Bot: @%s", me.username)
 
+    # Post silkasi to'g'ri bo'lishi uchun kanal username'ini Telegram'ning o'zidan olamiz (Railway'dagi qiymatga ishonmaymiz)
+    link_note = ""
+    try:
+        ch = await bot.get_chat(config.CHANNEL_ID)
+        real = (ch.username or "").lstrip("@")
+        if real.lower() != config.CHANNEL_USERNAME.lower():
+            log.warning("CHANNEL_USERNAME=%r noto'g'ri, kanalning haqiqiy username'i: %r", config.CHANNEL_USERNAME, real)
+            link_note = (f"\n⚠️ Railway'da CHANNEL_USERNAME=<code>{config.CHANNEL_USERNAME or '(bo‘sh)'}</code>, lekin kanalning "
+                         f"haqiqiy username'i <code>{real or '(yo‘q — yopiq kanal)'}</code>. Silkalar endi haqiqiysi bilan yasaladi.")
+        publisher.CHANNEL_USERNAME = real
+        if not real:
+            link_note += "\n⚠️ Kanal yopiq (username yo'q): post silkalari faqat kanal a'zolarida ochiladi."
+        log.info("Kanal: %s (@%s)", ch.title, real or "-")
+    except Exception as e:
+        log.exception("Kanalni tekshirib bo'lmadi")
+        link_note = f"\n❗️ Kanalga ulanib bo'lmadi (CHANNEL_ID to'g'rimi, bot kanalda adminmi?): <code>{e}</code>"
+
     dp = Dispatcher()
     # Tartib muhim: admin buyruqlari -> to'lov guruhi -> mijoz chati
     # Click guruhi birinchi: u yerdagi har qanday xabar jim qayta ishlanadi va boshqa joyga o'tmaydi
@@ -79,7 +96,9 @@ async def main():
     if config.CLICK_GROUP_ID:
         ub_txt += "\n🔵 Click guruhi jim kuzatilmoqda" + ("" if config.CLICK_SOURCE_IDS else
                                                           " (⚠️ CLICK_SOURCE_IDS berilmagan)")
-    await to_group(bot, f"🤖 @{me.username} ishga tushdi. E'lon narxi: {fmt_sum(config.AD_PRICE)} so'm.{ub_txt}")
+    sample = publisher.post_link(1).removesuffix("/1")
+    await to_group(bot, f"🤖 @{me.username} ishga tushdi. E'lon narxi: {fmt_sum(config.AD_PRICE)} so'm.{ub_txt}"
+                        f"\n🔗 Post silkalari: {sample}/…{link_note}")
     await bot.delete_webhook(drop_pending_updates=False)
     await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
 

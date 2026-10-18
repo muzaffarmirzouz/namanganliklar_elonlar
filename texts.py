@@ -114,14 +114,14 @@ T = {
         "ru": "Оплата поступила, спасибо! Сейчас опубликую",
     },
     "published": {
-        "uz_latn": "Tayyor, e'loningiz kanalda 👇\n{link}\n\nXaridor tez chiqsin! 🙂",
-        "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nХаридор тез чиқсин! 🙂",
-        "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nУдачной продажи! 🙂",
+        "uz_latn": "Tayyor, e'loningiz kanalda 👇\n{link}\n\nXaridor tez chiqsin! 🙂\n\nE'lon kanalda saqlanib qoladi. Sotsangiz yoki sotuvni to'xtatsangiz, shu yerga yozing — «sotildi» deb belgilab, raqamingizni olib tashlaymiz",
+        "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nХаридор тез чиқсин! 🙂\n\nЭълон каналда сақланиб қолади. Сотсангиз ёки сотувни тўхтатсангиз, шу ерга ёзинг — «сотилди» деб белгилаб, рақамингизни олиб ташлаймиз",
+        "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nУдачной продажи! 🙂\n\nОбъявление остаётся в канале. Если продадите или передумаете — напишите сюда, отметим «продано» и уберём ваш номер",
     },
     "published_service": {
-        "uz_latn": "Tayyor, e'loningiz kanalda 👇\n{link}\n\nMijozlaringiz ko'p bo'lsin! 🙂",
-        "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nМижозларингиз кўп бўлсин! 🙂",
-        "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nПобольше вам клиентов! 🙂",
+        "uz_latn": "Tayyor, e'loningiz kanalda 👇\n{link}\n\nMijozlaringiz ko'p bo'lsin! 🙂\n\nE'lon kanalda saqlanib qoladi. Xizmatni to'xtatsangiz, shu yerga yozing — «to'xtatildi» deb belgilab, raqamingizni olib tashlaymiz",
+        "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nМижозларингиз кўп бўлсин! 🙂\n\nЭълон каналда сақланиб қолади. Хизматни тўхтатсангиз, шу ерга ёзинг — «тўхтатилди» деб белгилаб, рақамингизни олиб ташлаймиз",
+        "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nПобольше вам клиентов! 🙂\n\nОбъявление остаётся в канале. Если прекратите оказывать услугу — напишите сюда, отметим «остановлено» и уберём ваш номер",
     },
     "publish_delay": {
         "uz_latn": "To'lov tushdi, lekin kanalga chiqarishda biroz kechikish bo'ldi. Tez orada chiqarib qo'yaman 🙏",

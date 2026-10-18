@@ -61,12 +61,34 @@ def clean_ready_html(html_text: str) -> str:
     return _TG_EMOJI.sub(r"\1", html_text or "").strip()
 
 
+SOLD_HEAD = "✅✅✅ <b>SOTILDI</b> ✅✅✅"
+STOP_HEAD = "⛔️ <b>E'LON TO'XTATILDI</b> ⛔️"
+# O'zbekiston telefon raqamlari: +998 90 123 45 67, 998901234567, 90-123-45-67, (90) 123 45 67 va h.k.
+_PHONE = re.compile(r"(?<![\d.,])(?:\+?998[\s\-]?)?\(?\d{2}\)?[\s\-]?\d{3}[\s\-]?\d{2}[\s\-]?\d{2}(?![\d.,])")
+_TEL_LINK = re.compile(r'<a href="tel:[^"]*">(.*?)</a>', re.S)
+
+
+def closed_head(data: dict) -> str:
+    """E'lon yopilgan bo'lsa (sotildi / to'xtatildi) — tepasidagi belgi, aks holda bo'sh."""
+    if data.get("_stopped"):
+        return STOP_HEAD
+    if data.get("_sold"):
+        return SOLD_HEAD
+    return ""
+
+
+def strip_phones(html_text: str) -> str:
+    """Yopilgan e'londan telefon raqamlarini olib tashlaydi (endi qo'ng'iroq qilinmasin)."""
+    t = _TEL_LINK.sub(r"\1", html_text)
+    return _PHONE.sub("•••", t)
+
+
 def ready_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> str:
     """Tayyor reklama: mijoz matni o'zgarmaydi. Kanal footeri sig'sa qo'shiladi, sig'masa — qo'shilmaydi
-    (mijoz matnini hech qachon kesmaymiz)."""
+    (mijoz matnini hech qachon kesmaymiz). Yopilgan e'londa telefon raqamlari olib tashlanadi."""
     body = clean_ready_html(data.get("_ready_html", ""))
-    if data.get("_sold"):
-        body = "✅✅✅ <b>SOTILDI</b> ✅✅✅" + ("\n\n" + body if body else "")
+    if head := closed_head(data):
+        body = head + ("\n\n" + strip_phones(body) if body else "")
     if not footer:
         return body
     full = (body + "\n\n" if body else "") + "━━━━━━━━━━━━━━\n" + footer
@@ -79,8 +101,11 @@ def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> s
     emoji, tag = CATEGORY_STYLE.get(data.get("category", "boshqa"), CATEGORY_STYLE["boshqa"])
 
     service = is_service(data)
-    if data.get("_sold") and not service:
-        head = ["✅✅✅ <b>SOTILDI</b> ✅✅✅", "", f"{emoji} <b>#{tag}</b> | #SOTILDI", ""]
+    closed = closed_head(data)
+    if data.get("_stopped"):
+        head = [STOP_HEAD, "", f"{emoji} <b>#{tag}</b> | #TOXTATILDI", ""]
+    elif data.get("_sold") and not service:
+        head = [SOLD_HEAD, "", f"{emoji} <b>#{tag}</b> | #SOTILDI", ""]
     else:
         head = [f"{emoji} <b>#{tag}</b> | {'#XIZMAT' if service else '#SOTILADI'}", ""]
     if data.get("title"):
@@ -98,9 +123,11 @@ def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> s
         info.append(f"▫️ {_e(line)}")
 
     contact = []
-    if data.get("phone"):
+    if closed:
+        pass  # sotilgan / to'xtatilgan e'londa aloqa ma'lumoti ko'rsatilmaydi
+    elif data.get("phone"):
         contact.append(f"📞 <b>Aloqa:</b> {_e(data['phone'])}")
-    if data.get("telegram"):
+    if data.get("telegram") and not closed:
         contact.append(f"✈️ <b>Telegram:</b> {_e(data['telegram'])}")
 
     tail = ["", "━━━━━━━━━━━━━━"] + ([footer] if footer else [])
@@ -113,6 +140,9 @@ def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> s
         return "\n".join(parts)
 
     desc = _e(data.get("description", ""))
+    if closed:
+        desc = strip_phones(desc)
+        info = [x if "Narxi:" in x else strip_phones(x) for x in info]  # narx qatoriga tegmaymiz
     text = assemble(desc)
     # Sig'masa — tavsifni qisqartiramiz (HTML teglar buzilmasligi uchun faqat tavsifni kesamiz)
     while visible_len(text) > limit and desc:

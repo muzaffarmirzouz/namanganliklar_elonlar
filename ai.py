@@ -102,8 +102,15 @@ ISH TARTIBI:
   Rasmlarni almashtirish yoki e'lonni o'chirish kerak bo'lsa — notify_admin chaqir va admin tez orada qilishini ayt.
   Agar mijoz e'loni kanalda turganda rasm yuborsa — avval so'ra: kanaldagi e'longa almashtirishmi yoki yangi e'lonmi.
   Almashtirish bo'lsa: notify_admin chaqir va cancel_order bilan ortiqcha qoralamani yop.
-- SOTILDI: mijoz buyumi sotilganini aytsa — mark_sold chaqir va qisqa tabrikla ("Tabriklayman! Kanalda sotildi deb belgilab qo'ydim").
-  Sotilgandan keyin yangi e'lon taklif qilma. Xizmat e'loniga "sotildi" qo'yilmaydi — xizmatni to'xtatgan bo'lsa notify_admin.
+- E'LON QANCHA TURADI: "necha kun turadi?", "qachon o'chadi?" desa — e'lon kanalga 1 marta chiqadi va o'chirilmaydi,
+  kanalda saqlanib qoladi. Qo'shimcha qil: buyumni sotsangiz yoki sotuvni to'xtatsangiz, bizga yozing — "SOTILDI" yoki
+  "E'LON TO'XTATILDI" deb belgilab, telefon raqamingizni olib tashlaymiz (endi qo'ng'iroq qilishmaydi).
+- SOTILDI: mijoz buyumi sotilganini aytsa — mark_sold chaqir va qisqa tabrikla ("Tabriklayman! Kanalda sotildi deb belgilab,
+  raqamingizni olib tashladim"). Sotilgandan keyin yangi e'lon taklif qilma.
+- TO'XTATILDI: mijoz sotuvni to'xtatsa, fikridan qaytsa, xizmatni to'xtatsa yoki "e'lonni olib tashlang", "qo'ng'iroq qilishmasin"
+  desa — mark_stopped chaqir. Xizmat e'loniga "sotildi" emas, faqat mark_stopped qo'yiladi.
+- Kanal postining silkasini O'ZING YOZMA va o'ylab topma — silkani bot o'zi yuboradi. Asbob natijasida silka bo'lsa,
+  aynan o'shani ishlat.
 - Asbob xato qaytarsa, mijozga texnik tafsilotni aytma — vaziyatni o'zing tuzat (masalan reset_ad) yoki qisqa savol ber.
 - Javoblarda markdown (**qalin**, # sarlavha) ishlatma — Telegram'da oddiy matn ko'rinadi. Emoji mumkin.
 - Agar mijoz e'longa aloqasi yo'q shaxsiy savol yoki boshqa ish bo'yicha yozsa, qisqa javob berib, admin tez orada
@@ -184,8 +191,14 @@ TOOLS = [
     {
         "name": "mark_sold",
         "description": ("Mijoz buyumi SOTILGANINI aytsa ('sotildi', 'sotib bo'ldim', 'продано') — kanaldagi e'longa "
-                        "'✅ SOTILDI' belgisini qo'yadi. Mijozning bir nechta e'loni bo'lsa, qaysi biri ekanini aniqlab "
+                        "'✅ SOTILDI' belgisini qo'yadi va telefon raqamini olib tashlaydi. Mijozning bir nechta e'loni bo'lsa, qaysi biri ekanini aniqlab "
                         "order_id ni yubor; bitta bo'lsa order_id shart emas."),
+        "input_schema": {"type": "object", "properties": {"order_id": {"type": "integer"}}},
+    },
+    {
+        "name": "mark_stopped",
+        "description": ("Mijoz sotuvni/xizmatni TO'XTATSA, fikridan qaytsa yoki e'lonni olib tashlashni so'rasa — kanaldagi e'longa "
+                        "'⛔️ E'LON TO'XTATILDI' belgisini qo'yadi va telefon raqamini olib tashlaydi. Bir nechta e'lon bo'lsa order_id yubor."),
         "input_schema": {"type": "object", "properties": {"order_id": {"type": "integer"}}},
     },
     {

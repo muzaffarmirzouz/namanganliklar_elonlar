@@ -366,8 +366,9 @@ async def run_ai(bot: Bot, uid: int, text: str):
             if live:
                 items = "; ".join(f"#{x['id']} «{x['data'].get('title', '')}»"
                                   + (" — xizmat" if is_service(x["data"]) else "")
-                                  + (" — SOTILDI belgisi bor" if x["data"].get("_sold") else "") for x in live)
-                ed_line = (ed_line + "\n" if ed_line else "") + "Mijozning kanaldagi e'lonlari (mark_sold uchun): " + items
+                                  + (" — SOTILDI belgisi bor" if x["data"].get("_sold") else "")
+                                  + (" — TO'XTATILDI belgisi bor" if x["data"].get("_stopped") else "") for x in live)
+                ed_line = (ed_line + "\n" if ed_line else "") + "Mijozning kanaldagi e'lonlari (mark_sold / mark_stopped uchun): " + items
             if not o:
                 last = await db.last_published(uid)
                 lines = [lang_line, "Faol e'lon yo'q (hozircha qoralama ochilmagan)."]
@@ -428,7 +429,9 @@ async def run_ai(bot: Bot, uid: int, text: str):
             if name == "edit_published":
                 return await edit_published(bot, uid, args)
             if name == "mark_sold":
-                return await mark_sold(bot, uid, args.get("order_id"))
+                return await close_ad(bot, uid, args.get("order_id"), "sold")
+            if name == "mark_stopped":
+                return await close_ad(bot, uid, args.get("order_id"), "stopped")
             if name == "notify_admin":
                 u = await db.get_user(uid) or {}
                 ed = await db.editable_published(uid, EDIT_WINDOW_DAYS * 86400)
@@ -575,6 +578,12 @@ async def edit_published(bot: Bot, uid: int, args: dict) -> str:
 
 
 async def mark_sold(bot: Bot, uid: int, order_id: int | None) -> str:
+    return await close_ad(bot, uid, order_id, "sold")
+
+
+async def close_ad(bot: Bot, uid: int, order_id: int | None, kind: str) -> str:
+    """kind="sold" — SOTILDI, kind="stopped" — E'LON TO'XTATILDI. Ikkalasida ham telefon raqami olib tashlanadi."""
+    flag, label = ("_sold", "SOTILDI") if kind == "sold" else ("_stopped", "E'LON TO'XTATILDI")
     live = await db.recent_published(uid, SOLD_WINDOW_DAYS * 86400)
     live = [x for x in live if x["channel_msgs"]]
     if not live:
@@ -584,26 +593,27 @@ async def mark_sold(bot: Bot, uid: int, order_id: int | None) -> str:
         if not o:
             return "Bu raqamli e'lon mijozniki emas yoki kanalda yo'q. Ro'yxatdan to'g'risini tanla."
     else:
-        unsold = [x for x in live if not x["data"].get("_sold") and not is_service(x["data"])]
-        if len(unsold) > 1:
-            return ("Mijozning bir nechta e'loni bor: " + ", ".join(f"#{x['id']} «{x['data'].get('title', '')}»" for x in unsold)
-                    + ". Qaysi biri sotilganini so'ra, keyin order_id bilan chaqir.")
-        o = unsold[0] if unsold else live[0]
-    if is_service(o["data"]):
-        return ("Bu xizmat e'loni — unga SOTILDI belgisi qo'yilmaydi. Mijoz xizmatni to'xtatgan bo'lsa yoki e'lonni "
-                "olib tashlash kerak bo'lsa — notify_admin chaqir.")
-    if o["data"].get("_sold"):
-        return "Bu e'longa SOTILDI belgisi allaqachon qo'yilgan."
-    o["data"]["_sold"] = True
+        open_ads = [x for x in live if not x["data"].get("_sold") and not x["data"].get("_stopped")
+                    and not (kind == "sold" and is_service(x["data"]))]
+        if len(open_ads) > 1:
+            return ("Mijozning bir nechta e'loni bor: " + ", ".join(f"#{x['id']} «{x['data'].get('title', '')}»" for x in open_ads)
+                    + ". Qaysi biri ekanini so'ra, keyin order_id bilan chaqir.")
+        o = open_ads[0] if open_ads else live[0]
+    if kind == "sold" and is_service(o["data"]):
+        return "Bu xizmat e'loni — unga SOTILDI qo'yilmaydi. Mijoz xizmatni to'xtatgan bo'lsa mark_stopped chaqir."
+    if o["data"].get("_sold") or o["data"].get("_stopped"):
+        return "Bu e'lon allaqachon yopilgan (SOTILDI yoki TO'XTATILDI belgisi bor)."
+    o["data"][flag] = True
     try:
         link = await publisher.edit_post(bot, o)
     except Exception as e:
-        log.exception("sotildi belgisini qo'yib bo'lmadi")
-        await to_group(bot, f"❗️ #{o['id']} ga «SOTILDI» qo'yib bo'lmadi: <code>{escape(str(e))[:300]}</code>")
+        log.exception("e'lonni yopib bo'lmadi")
+        await to_group(bot, f"❗️ #{o['id']} ga «{label}» qo'yib bo'lmadi: <code>{escape(str(e))[:300]}</code>")
         return "Kanal postini hozir o'zgartirib bo'lmadi, adminga xabar berildi. Mijozga admin tez orada belgilashini ayt."
-    await db.update_data(o["id"], {"_sold": True})
-    await to_group(bot, f"🏷 #{o['id']} «{escape(o['data'].get('title', ''))}» — mijoz SOTILDI dedi, kanalda belgilandi\n{link}")
-    return f"Kanalda SOTILDI deb belgilandi: {link}"
+    await db.update_data(o["id"], {flag: True})
+    await to_group(bot, f"{'🏷' if kind == 'sold' else '⛔️'} #{o['id']} «{escape(o['data'].get('title', ''))}» — "
+                        f"mijoz so'rovi bilan «{label}» qo'yildi, telefon raqami olib tashlandi\n{link}")
+    return f"Kanalda «{label}» deb belgilandi va telefon raqami olib tashlandi: {link}"
 
 
 async def send_human(bot: Bot, uid: int, text: str, kw: dict, markup=None):
