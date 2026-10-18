@@ -52,7 +52,30 @@ def visible_len(html_text: str) -> int:
     return len(plain.encode("utf-16-le")) // 2
 
 
+_TG_EMOJI = re.compile(r"<tg-emoji[^>]*>(.*?)</tg-emoji>", re.S)
+
+
+def clean_ready_html(html_text: str) -> str:
+    """Mijozdan kelgan tayyor matn (HTML). Premium custom-emoji'ni oddiy emoji'ga almashtiramiz —
+    bot ularni yubora olmaydi."""
+    return _TG_EMOJI.sub(r"\1", html_text or "").strip()
+
+
+def ready_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> str:
+    """Tayyor reklama: mijoz matni o'zgarmaydi. Kanal footeri sig'sa qo'shiladi, sig'masa — qo'shilmaydi
+    (mijoz matnini hech qachon kesmaymiz)."""
+    body = clean_ready_html(data.get("_ready_html", ""))
+    if data.get("_sold"):
+        body = "✅✅✅ <b>SOTILDI</b> ✅✅✅" + ("\n\n" + body if body else "")
+    if not footer:
+        return body
+    full = (body + "\n\n" if body else "") + "━━━━━━━━━━━━━━\n" + footer
+    return full if visible_len(full) <= limit else body
+
+
 def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> str:
+    if data.get("_ready"):
+        return ready_caption(data, footer, limit)
     emoji, tag = CATEGORY_STYLE.get(data.get("category", "boshqa"), CATEGORY_STYLE["boshqa"])
 
     service = is_service(data)

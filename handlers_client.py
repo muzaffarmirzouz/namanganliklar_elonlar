@@ -60,7 +60,8 @@ RULES = (
     "avtoservis, repetitor, to'y-tadbir xizmatlari va h.k.\n"
     "⛔️ Qabul qilinmaydi: Telegram kanal/guruh/bot reklamalari, yangilik kanallari, onlayn kurs va "
     "\"pul topish\" reklamalari, vakansiyalar, kredit, stavka, 18+ va taqiqlangan narsalar.\n\n"
-    "📸 Sotuvda 3-4 ta sifatli rasm yuboring — albom qilib chiroyli joylab beramiz. Xizmatda rasm ixtiyoriy."
+    "📸 Sotuvda 3-4 ta sifatli rasm yoki video yuboring — albom qilib chiroyli joylab beramiz. Xizmatda rasm ixtiyoriy.\n"
+    "📝 Tayyor reklamangiz bo'lsa (rasm/video + matn), shunchaki yuboring yoki forward qiling — o'zgartirmasdan joylaymiz."
 )
 
 _ai_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
@@ -70,6 +71,8 @@ _album_captions: dict[int, list[str]] = defaultdict(list)
 
 
 def missing_fields(order: dict) -> list[str]:
+    if order["data"].get("_ready"):  # tayyor reklama: faqat mazmuni bo'lsa yetarli
+        return [] if (order["photos"] or order["data"].get("_ready_html")) else ["tayyor reklama mazmuni"]
     miss = [name for key, name in REQUIRED.items() if not order["data"].get(key)]
     if not order["photos"] and not is_service(order["data"]):  # xizmat e'lonida rasm ixtiyoriy
         miss.append("kamida 1 ta rasm")
@@ -116,7 +119,7 @@ async def on_business_connection(bc: BusinessConnection, bot: Bot):
         await to_group(bot, f"🔌 Business akkaunt uzildi: {escape(bc.user.full_name)}")
 
 
-@router.business_message(F.photo)
+@router.business_message(F.photo | F.video)
 async def biz_photo(m: Message, bot: Bot):
     if await business_gate(m):
         await on_photo(m, bot)
@@ -170,7 +173,7 @@ async def btn_new(m: Message):
         await db.set_status(o["id"], "cancelled")
     await db.save_history(uid, [])
     await db.get_or_create_draft(uid)
-    await m.answer("Yangi e'lon boshladik ✍️\nNima sotasiz yoki qanday xizmat? Qisqacha yozing, sotuv bo'lsa 3-4 ta rasm ham yuboring.")
+    await m.answer("Yangi e'lon boshladik ✍️\nNima sotasiz yoki qanday xizmat? Qisqacha yozing, sotuv bo'lsa 3-4 ta rasm yoki video ham yuboring. Tayyor reklamangiz bo'lsa — shunchaki tashlang.")
 
 
 @router.message(F.text == BTN_CANCEL)
@@ -208,8 +211,27 @@ async def cancel_active(uid: int) -> str:
     return "E'lon bekor qilindi. Yangi e'lon bermoqchi bo'lsangiz, yozing."
 
 
-# ================= Rasmlar (ikkala rejim) =================
-@router.message(F.photo)
+# ================= Rasm va videolar (ikkala rejim) =================
+_album_plain: dict[int, list[str]] = defaultdict(list)
+_album_fwd: dict[int, str] = {}
+READY_MIN_LEN = 30  # shundan uzun izoh yoki forward — tayyor reklama bo'lishi mumkin
+
+
+def forward_source(m: Message) -> str:
+    """Forward qilingan bo'lsa — qayerdan (AI va admin uchun qisqa izoh), aks holda bo'sh."""
+    o = m.forward_origin
+    if not o:
+        return ""
+    chat = getattr(o, "chat", None) or getattr(o, "sender_chat", None)
+    if chat:
+        return f"«{chat.title or ''}»" + (f" @{chat.username}" if getattr(chat, "username", None) else "")
+    user = getattr(o, "sender_user", None)
+    if user:
+        return user.full_name or "foydalanuvchi"
+    return getattr(o, "sender_user_name", "") or "noma'lum manba"
+
+
+@router.message(F.photo | F.video)
 async def on_photo(m: Message, bot: Bot):
     uid = m.from_user.id
     await remember(m)
@@ -217,9 +239,12 @@ async def on_photo(m: Message, bot: Bot):
     o = await db.active_order(uid)
 
     if o and o["status"] == "awaiting_payment":
-        await forward_receipt(bot, m, o)
+        if m.photo:
+            await forward_receipt(bot, m, o)
+        else:
+            await run_ai(bot, uid, "[Tizim: to'lov kutilayotganda mijoz video yubordi.]")
         return
-    if not o:
+    if not o and m.photo:
         # To'lov muddati o'tgan e'lon bormi? Bot "chekni shu yerga tashlang" degan — rasm chek bo'lsa, adminga
         expired = await db.recent_expired(uid)
         if expired and await forward_receipt(bot, m, expired, strict=False):
@@ -228,7 +253,7 @@ async def on_photo(m: Message, bot: Bot):
         await bot.send_message(uid, tr("paid_wait", await db.get_lang(uid)), **kw)
         return
 
-    file_id = m.photo[-1].file_id  # eng katta o'lcham
+    item = m.photo[-1].file_id if m.photo else {"t": "video", "id": m.video.file_id}
     async with _photo_locks[uid]:
         o = await db.get_or_create_draft(uid)
         photos = o["photos"]
@@ -236,12 +261,15 @@ async def on_photo(m: Message, bot: Bot):
             if m.media_group_id is None or uid not in _album_timers:
                 await bot.send_message(uid, tr("too_many_photos", await db.get_lang(uid), n=MAX_PHOTOS), **kw)
             return
-        photos.append(file_id)
+        photos.append(item)
         await db.set_photos(o["id"], photos)
         if o["data"].get("_preview"):
-            await db.set_preview_shown(o["id"], False)  # rasm o'zgardi — qayta ko'rsatish kerak
+            await db.set_preview_shown(o["id"], False)  # media o'zgardi — qayta ko'rsatish kerak
     if m.caption:
-        _album_captions[uid].append(m.caption)
+        _album_captions[uid].append(m.html_text)   # formatlash (qalin, silka) saqlanadi
+        _album_plain[uid].append(m.caption)
+    if src := forward_source(m):
+        _album_fwd[uid] = src
 
     # Albom bir nechta alohida xabar bo'lib keladi — hammasi kelgach bitta javob beramiz
     if t := _album_timers.get(uid):
@@ -256,13 +284,25 @@ async def _flush_photos(bot: Bot, uid: int):
         return
     _album_timers.pop(uid, None)
     captions = _album_captions.pop(uid, [])
+    plain = " ".join(_album_plain.pop(uid, [])).strip()
+    fwd = _album_fwd.pop(uid, "")
     o = await db.active_order(uid)
     if not o:
         return
-    note = f"[Tizim: mijoz rasm yubordi. Jami rasmlar: {len(o['photos'])} ta, maksimum {MAX_PHOTOS}.]"
-    if captions:
-        note += "\nRasm izohi: " + " ".join(captions)
-        await db.set_lang(uid, detect_lang(" ".join(captions), await db.get_lang(uid)))
+    n_video = sum(1 for x in o["photos"] if isinstance(x, dict) and x.get("t") == "video")
+    n_photo = len(o["photos"]) - n_video
+    note = (f"[Tizim: mijoz media yubordi. Qoralamada jami: {n_photo} ta rasm, {n_video} ta video "
+            f"(maksimum {MAX_PHOTOS}).")
+    if fwd:
+        note += f" Bu boshqa joydan FORWARD qilingan: {fwd}."
+    note += "]"
+    if plain:
+        note += f"\nMedia ostidagi matn: «{plain[:1500]}»"
+        await db.set_lang(uid, detect_lang(plain, await db.get_lang(uid)))
+    if captions and (len(plain) >= READY_MIN_LEN or fwd):
+        await db.update_data(o["id"], {"_ready_candidate": "\n\n".join(captions)})
+        note += ("\n[Tizim: bu TAYYOR REKLAMA bo'lishi mumkin. Agar shunday bo'lsa — mazmuni qoidaga mosligini tekshir, "
+                 "use_ready_ad chaqir va keyin show_preview.]")
     await run_ai(bot, uid, note)
 
 
@@ -272,7 +312,16 @@ async def on_text(m: Message, bot: Bot):
     await remember(m)
     uid = m.from_user.id
     await db.set_lang(uid, detect_lang(m.text, await db.get_lang(uid)))
-    await run_ai(bot, uid, m.text[:2000])
+    text = m.text[:2000]
+    fwd = forward_source(m)
+    if fwd or len(m.text) >= 80:
+        o = await db.active_order(uid)
+        if not o or o["status"] == "draft":
+            o = o or await db.get_or_create_draft(uid)
+            await db.update_data(o["id"], {"_ready_candidate": m.html_text})
+            if fwd:
+                text = f"[Tizim: mijoz boshqa joydan matnli post FORWARD qildi: {fwd}. Bu TAYYOR REKLAMA bo'lishi mumkin.]\n{text}"
+    await run_ai(bot, uid, text)
 
 
 @router.message()
@@ -340,7 +389,11 @@ async def run_ai(bot: Bot, uid: int, text: str):
                              "mijoz hammasini yozib javob beradi)" if business else "bot chati (tugmalar bor)"),
                 f"Buyurtma #{o['id']}, holati: {o['status']}",
                 "Qoralama: " + json.dumps(data, ensure_ascii=False),
-                f"Rasmlar soni: {len(o['photos'])}",
+                f"Media soni (rasm+video): {len(o['photos'])}",
+                ("TAYYOR REKLAMA rejimi: ha — mijoz matni o'zgartirilmasdan joylanadi" if o["data"].get("_ready") else
+                 "Tayyor reklama nomzodi bor (use_ready_ad bilan qabul qilish mumkin): «"
+                 + str(o["data"].get("_ready_candidate", ""))[:400] + "»" if o["data"].get("_ready_candidate") else
+                 "Tayyor reklama: yo'q"),
                 "Tayyor e'lon mijozga ko'rsatilganmi: " + ("ha" if o["data"].get("_preview") else "yo'q"),
             ]
             miss = missing_fields(o)
@@ -417,7 +470,18 @@ async def run_ai(bot: Bot, uid: int, text: str):
                         "keyin update_ad.").format(o["id"])
             if o["status"] != "draft":
                 return "Hozir qoralamani o'zgartirib bo'lmaydi."
+            if name == "use_ready_ad":
+                cand = o["data"].get("_ready_candidate") or o["data"].get("_ready_html")
+                if not cand and not o["photos"]:
+                    return "Tayyor reklama topilmadi — mijozdan rasm/video va matnni yuborishini so'ra."
+                await db.update_data(o["id"], {"_ready": True, "_ready_html": cand or "",
+                                                "category": args.get("category"), "title": args.get("title")})
+                await db.set_preview_shown(o["id"], False)
+                return ("Tayyor reklama sifatida qabul qilindi (matni o'zgartirilmaydi). Endi show_preview chaqir — "
+                        "bot kanalda qanday chiqishini ko'rsatib, tasdiqlashni so'raydi.")
             if name == "update_ad":
+                if o["data"].get("_ready"):
+                    await db.update_data(o["id"], {"_ready": False})  # oddiy tartibga qaytdi
                 await db.update_data(o["id"], args)
                 await db.set_preview_shown(o["id"], False)
                 o = await db.get_order(o["id"])
@@ -477,6 +541,9 @@ async def edit_published(bot: Bot, uid: int, args: dict) -> str:
     if not o:
         return (f"Tuzatsa bo'ladigan e'lon topilmadi (oxirgi {EDIT_WINDOW_DAYS} kunda joylangan e'lon yo'q yoki "
                 "kanaldan o'chirilgan). Kerak bo'lsa notify_admin chaqir.")
+    if o["data"].get("_ready"):
+        return ("Bu mijozning tayyor reklamasi — matnini bot tahrirlay olmaydi. notify_admin chaqirib, nimani "
+                "o'zgartirish kerakligini yoz; mijozga admin tez orada tuzatishini ayt.")
     if (o.get("edits") or 0) >= MAX_EDITS:
         return f"Bepul tuzatishlar soni ({MAX_EDITS} ta) tugagan. notify_admin chaqirib, adminga yubor."
     changes = {k: v for k, v in args.items() if k in EDITABLE and v not in (None, "", [])}

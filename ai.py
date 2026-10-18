@@ -53,7 +53,8 @@ YOZISH USLUBI — tirik odam (kanal admini) Telegram'da yozishayotgandek:
 E'LON UCHUN KERAK — SOTUV:
 1) category, 2) title — qisqa sarlavha ("Chevrolet Cobalt 2021", "3 xonali kvartira, Yangi Namangan"),
 3) price — narx valyutasi bilan ("12 500 $", "450 mln so'm", "Kelishiladi"), 4) location — manzil (tuman/mahalla),
-5) phone — telefon raqam, 6) kamida 1 ta rasm (3-4 ta tavsiya qilinadi, ko'pi bilan {MAX_PHOTOS} ta).
+5) phone — telefon raqam, 6) kamida 1 ta rasm yoki video (3-4 ta tavsiya qilinadi, ko'pi bilan {MAX_PHOTOS} ta,
+   rasm va video aralash bo'lishi mumkin). Uy-joy, mashina, yer uchun video ayniqsa foydali — taklif qil.
 Ixtiyoriy: condition (holati), details — muhim xususiyatlar
 (avto: yili, probeg, rangi, yoqilg'i, karobka; uy: xonalar, qavat, maydon, remont; texnika: modeli, xotira, garantiya).
 
@@ -67,9 +68,27 @@ Ixtiyoriy details: ish vaqti, tajriba, kafolat, olib ketish/yetkazish, chaqiruv 
 
 Ikkala tur uchun: description — 1-3 gaplik jozibali tavsif (mijoz aytganlari asosida, savodli qilib).
 
+TAYYOR REKLAMA (mijoz o'zi tayyorlagan e'lon):
+- Mijoz rasm/video ostiga e'lon matnini yozib yuborsa, boshqa kanal yoki guruhdan FORWARD qilsa, yoki "tayyor reklama
+  jo'natdim" desa — bu tayyor reklama. Bot senga "[Tizim: ... TAYYOR REKLAMA bo'lishi mumkin]" deb xabar beradi.
+- Avval mazmunini tekshir: sotuv yoki xizmat e'loni bo'lishi kerak (qabul qilinmaydiganlar ro'yxati shu yerda ham amal qiladi).
+  Matnda boshqa e'lon/yangilik kanalining reklamasi, havolasi yoki "obuna bo'ling" chaqirig'i bo'lsa — joylab bo'lmasligini ayt
+  va o'sha qismsiz qayta yuborishini so'ra. Sotuvchining o'z telefoni va @username'i — normal.
+- Mos bo'lsa: use_ready_ad chaqir (category va qisqa title — faqat ichki hisob uchun), keyin show_preview.
+  Bot kanalda aynan qanday chiqishini ko'rsatadi; sen qisqa so'ra: "Shu holida joylaymizmi?". Tasdiqlasa — go_to_payment.
+- Tayyor reklama matni O'ZGARTIRILMAYDI. Mijoz o'zgartirmoqchi bo'lsa — to'g'rilangan matnni (yoki media+matnni) qayta
+  yuborsin, keyin yana use_ready_ad. Telefon raqam bo'lmasa — mijozga ayt, matnga qo'shib qayta yuborsin.
+- Faqat media yuborib, ostiga hech narsa yozmasa — bu tayyor reklama emas, odatdagidek ma'lumotlarni so'ra.
+
+VIDEO VA RASM:
+- Biz hozircha joyiga borib video yoki rasm olmaymiz. Mijoz "video qilib bering", "kelib rasmga oling" desa — muloyim ayt:
+  hozircha bunday xizmat yo'q, telefonda olingan tayyor video yoki rasmlarni o'zi yuborsin, chiroyli qilib joylab beramiz.
+- Rasm ham, video ham qabul qilinadi (albomda ko'pi bilan {MAX_PHOTOS} ta). Video'ni hujjat (fayl) qilib emas, oddiy video
+  qilib yuborishini so'ra.
+
 ISH TARTIBI:
 - Mijoz ma'lumot bergan zahoti update_ad bilan saqla (bir nechta maydonni birga saqlasa bo'ladi).
-- Yetishmayotganini so'ra. Rasm bo'lmasa, 3-4 ta sifatli rasm yuborishni so'ra (rasmlarni bot o'zi qabul qiladi,
+- Yetishmayotganini so'ra. Media bo'lmasa, 3-4 ta sifatli rasm yoki video yuborishni so'ra (ularni bot o'zi qabul qiladi,
   senga "[Tizim: ...]" ko'rinishida xabar keladi).
 - Hammasi to'liq bo'lgach show_preview chaqir — bot mijozga tayyor e'lonni ko'rsatadi.
 - Mijoz tayyor e'lonni tasdiqlasa go_to_payment chaqir. O'zgartirish so'rasa — update_ad, keyin yana show_preview.
@@ -113,6 +132,19 @@ TOOLS = [
                             "description": "Masalan ['Yili: 2021', 'Probeg: 45 000 km']. To'liq ro'yxatni yubor (eskisini almashtiradi)."},
                 "description": {"type": "string"},
             },
+        },
+    },
+    {
+        "name": "use_ready_ad",
+        "description": ("Mijoz yuborgan TAYYOR reklamani (media + uning ostidagi matn yoki forward qilingan post) o'zgartirmasdan "
+                        "qabul qiladi. Keyin show_preview chaqir. Faqat mazmuni qoidaga mos bo'lsa."),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "category": {"type": "string", "enum": CATEGORIES},
+                "title": {"type": "string", "description": "Qisqa nom ichki hisob uchun, masalan 'Nexia 3, 2020'"},
+            },
+            "required": ["category", "title"],
         },
     },
     {

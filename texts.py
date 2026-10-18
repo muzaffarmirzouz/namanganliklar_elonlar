@@ -144,14 +144,14 @@ T = {
         "ru": "Не удалось подтвердить чек: оплата {amount} сум не найдена. Проверьте сумму или напишите администратору",
     },
     "too_many_photos": {
-        "uz_latn": "Ko'pi bilan {n} ta rasm bo'ladi",
-        "uz_cyrl": "Кўпи билан {n} та расм бўлади",
-        "ru": "Можно максимум {n} фото",
+        "uz_latn": "Ko'pi bilan {n} ta rasm yoki video bo'ladi",
+        "uz_cyrl": "Кўпи билан {n} та расм ёки видео бўлади",
+        "ru": "Можно максимум {n} фото или видео",
     },
     "other_media": {
-        "uz_latn": "Ma'lumotni matn bilan yozing, rasmlarni esa rasm qilib tashlang 📸",
-        "uz_cyrl": "Маълумотни матн билан ёзинг, расмларни эса расм қилиб ташланг 📸",
-        "ru": "Пишите информацию текстом, а фото отправляйте как фото 📸",
+        "uz_latn": "Ma'lumotni matn bilan yozing, rasm va videolarni esa fayl emas, oddiy rasm/video qilib tashlang 📸",
+        "uz_cyrl": "Маълумотни матн билан ёзинг, расм ва видеоларни эса файл эмас, оддий расм/видео қилиб ташланг 📸",
+        "ru": "Пишите информацию текстом, а фото и видео отправляйте не файлом, а обычным фото/видео 📸",
     },
     "ack": {
         "uz_latn": "Xo'p, tushundim 👍",
