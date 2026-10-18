@@ -15,6 +15,30 @@ from config import CLICK_GROUP_ID, PAYMENT_GROUP_ID, TG_API_HASH, TG_API_ID, TG_
 from handlers_group import process_payment
 
 log = logging.getLogger(__name__)
+CLIENT = None  # ishga tushgan Telethon mijozi (post raqamini topish uchun ham kerak)
+
+
+async def find_post(channel_id: int, expected: str, norm) -> list[int] | None:
+    """Kanalning so'nggi postlari ichidan matni mos keladiganini topadi. Qaytaradi: [izohli post, albomdagi qolganlari]."""
+    if not CLIENT:
+        return None
+    try:
+        try:
+            entity = await CLIENT.get_input_entity(channel_id)
+        except Exception:
+            await CLIENT.get_dialogs(limit=300)  # kanal hali keshda yo'q bo'lsa
+            entity = await CLIENT.get_input_entity(channel_id)
+        msgs = await CLIENT.get_messages(entity, limit=40)
+    except Exception:
+        log.exception("Userbot: kanal postlarini o'qib bo'lmadi")
+        return None
+    for m in msgs:
+        if m.message and norm(m.message) == expected:
+            ids = [m.id]
+            if m.grouped_id:
+                ids += sorted(x.id for x in msgs if x.grouped_id == m.grouped_id and x.id != m.id)
+            return ids
+    return None
 
 
 async def start(bot: Bot):
@@ -53,6 +77,8 @@ async def start(bot: Bot):
         except Exception:
             log.exception("Userbot: to'lovni qayta ishlashda xato")
 
+    global CLIENT
+    CLIENT = client
     me = await client.get_me()
     log.info("Userbot ulandi: %s (id=%s), guruh %s kuzatilmoqda", me.first_name, me.id, PAYMENT_GROUP_ID)
     return client

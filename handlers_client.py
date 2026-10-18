@@ -438,7 +438,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 await to_group(bot, f"🙋 Mijoz yordam so'radi: {escape(str(args.get('reason', '')))[:500]}\n"
                                     f"👤 <a href=\"tg://user?id={uid}\">{escape(u.get('full_name') or str(uid))}</a>"
                                     + (f" (@{u['username']})" if u.get("username") else "")
-                                    + (f"\n📌 E'lon: {publisher.post_link(ed['channel_msgs'][0])}" if ed and ed["channel_msgs"] else ""))
+                                    + (f"\n📌 E'lon: {publisher.post_link(ed['channel_msgs'][0])}" if ed and ed["channel_msgs"] and ed["channel_msgs"][0] else ""))
                 return "Adminga yuborildi. Mijozga admin tez orada o'zi hal qilishini ayt."
             if name == "cancel_order":
                 return await cancel_active(uid)
@@ -533,7 +533,7 @@ FIELD_NAMES = {"title": "sarlavha", "price": "narx", "location": "manzil", "phon
 
 async def edit_published(bot: Bot, uid: int, args: dict) -> str:
     """Kanaldagi e'lonni tuzatish: bazada yangilaydi, kanal postini tahrirlaydi, guruhga hisobot beradi."""
-    cands = [x for x in await db.recent_published(uid, EDIT_WINDOW_DAYS * 86400) if x["channel_msgs"]]
+    cands = [x for x in await db.recent_published(uid, EDIT_WINDOW_DAYS * 86400) if x["channel_msgs"] and x["channel_msgs"][0] != 0]
     if args.get("order_id"):
         o = next((x for x in cands if x["id"] == int(args["order_id"])), None)
     elif len(cands) > 1:
@@ -585,7 +585,7 @@ async def close_ad(bot: Bot, uid: int, order_id: int | None, kind: str) -> str:
     """kind="sold" — SOTILDI, kind="stopped" — E'LON TO'XTATILDI. Ikkalasida ham telefon raqami olib tashlanadi."""
     flag, label = ("_sold", "SOTILDI") if kind == "sold" else ("_stopped", "E'LON TO'XTATILDI")
     live = await db.recent_published(uid, SOLD_WINDOW_DAYS * 86400)
-    live = [x for x in live if x["channel_msgs"]]
+    live = [x for x in live if x["channel_msgs"] and x["channel_msgs"][0] != 0]
     if not live:
         return "Mijozning kanalda turgan e'loni topilmadi (o'chirilgan yoki juda eski). Kerak bo'lsa notify_admin chaqir."
     if order_id:

@@ -1,5 +1,7 @@
 """E'lonni kanalga (yoki mijozga oldindan ko'rish uchun) albom qilib yuborish."""
 import os
+import re
+from html import unescape
 from aiogram import Bot
 from aiogram.types import InputMediaPhoto, InputMediaVideo
 
@@ -56,10 +58,30 @@ def post_link(msg_id: int) -> str:
     return f"https://t.me/c/{str(CHANNEL_ID).removeprefix('-100')}/{msg_id}"
 
 
-async def publish(bot: Bot, order: dict) -> str:
+def channel_link() -> str:
+    return f"https://t.me/{CHANNEL_USERNAME}" if CHANNEL_USERNAME else ""
+
+
+def norm_text(t: str) -> str:
+    """Solishtirish uchun: teglarsiz, kichik harf, bo'shliqlar bitta, boshidagi 120 belgi."""
+    t = unescape(re.sub(r"<[^>]+>", "", t or ""))
+    return " ".join(t.lower().split())[:120]
+
+
+def expected_text(order: dict) -> str:
+    items = order["photos"][:10]
+    caption = build_caption(order["data"], footer(), limit=TEXT_LIMIT if not items else 1024)
+    return norm_text(caption)
+
+
+async def publish(bot: Bot, order: dict) -> tuple[str, bool]:
+    """Qaytaradi: (silka, pending). pending=True — Telegram postni navbatga qo'ydi (katta kanalga video),
+    haqiqiy raqami hali yo'q (message_id=0). Unda vaqtincha kanal silkasi qaytadi."""
     ids = await send_ad(bot, CHANNEL_ID, order)
     await db.mark_published(order["id"], ids)
-    return post_link(ids[0])
+    if not ids or ids[0] == 0:
+        return channel_link() or post_link(0), True
+    return post_link(ids[0]), False
 
 
 async def edit_post(bot: Bot, order: dict) -> str:

@@ -155,3 +155,22 @@ async def on_other_group(m: Message):
     log.info("Boshqa guruh xabari (bot jim): chat_id=%s «%s» from=%s bot=%s",
              m.chat.id, m.chat.title, m.from_user.id if m.from_user else None,
              m.from_user.is_bot if m.from_user else None)
+
+
+# ---------- E'lonlar kanali: navbatga qo'yilgan (video) postning haqiqiy raqamini ushlash ----------
+channel_router = Router()
+
+
+@channel_router.channel_post()
+async def on_channel_post(m: Message):
+    import publisher
+    if m.chat.id != publisher.CHANNEL_ID:
+        return
+    text = publisher.norm_text(m.caption or m.text or "")
+    if not text:
+        return
+    for o in await db.pending_post_orders():
+        if publisher.expected_text(o) == text:
+            await db.set_channel_msgs(o["id"], [m.message_id])
+            log.info("#%s post raqami kanal postidan aniqlandi: %s", o["id"], m.message_id)
+            return

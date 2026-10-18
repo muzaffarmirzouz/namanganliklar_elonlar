@@ -84,6 +84,27 @@ async def cmd_resume_ai(m: Message, command: CommandObject):
     await m.answer("✅ Bot shu mijoz bilan yana javob beradi.")
 
 
+@router.message(Command("silka"), is_admin)
+async def cmd_set_link(m: Message, command: CommandObject, bot: Bot):
+    """/silka 12 52313 — #12 e'lonning kanaldagi post raqamini qo'lda belgilash va mijozga to'g'ri silkani yuborish.
+    Kanal post silkasini to'g'ridan-to'g'ri ham berish mumkin: /silka 12 https://t.me/kanal/52313"""
+    import publisher
+    parts = (command.args or "").split()
+    post = parts[1].rstrip("/").rsplit("/", 1)[-1] if len(parts) == 2 else ""
+    if len(parts) != 2 or not parts[0].lstrip("#").isdigit() or not post.isdigit():
+        await m.answer("Ishlatish: /silka E'LON_RAQAMI POST_RAQAMI\nMasalan: /silka 12 52313  yoki  /silka 12 https://t.me/kanal/52313")
+        return
+    oid = int(parts[0].lstrip("#"))
+    o = await db.get_order(oid)
+    if not o or o["status"] != "published":
+        await m.answer("Bu raqamli joylangan e'lon topilmadi.")
+        return
+    await db.set_channel_msgs(oid, [int(post)])
+    link = publisher.post_link(int(post))
+    await notify_user(bot, o["user_id"], "published_link", link=link)
+    await m.answer(f"✅ #{oid} post silkasi saqlandi va mijozga yuborildi: {link}")
+
+
 @router.message(Command("kutilmoqda"), is_admin)
 async def cmd_awaiting(m: Message):
     orders = await db.awaiting_orders()

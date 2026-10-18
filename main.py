@@ -84,7 +84,7 @@ async def main():
     # Tartib muhim: admin buyruqlari -> to'lov guruhi -> mijoz chati
     # Click guruhi birinchi: u yerdagi har qanday xabar jim qayta ishlanadi va boshqa joyga o'tmaydi
     dp.include_routers(handlers_group.click_router, handlers_admin.router, handlers_group.router,
-                       handlers_client.router, handlers_group.silent_router)
+                       handlers_client.router, handlers_group.silent_router, handlers_group.channel_router)
 
     try:
         ub = await userbot.start(bot)  # bo'lmasa None — bot o'zi ishlayveradi

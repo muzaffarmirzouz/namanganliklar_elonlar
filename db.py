@@ -271,6 +271,19 @@ async def mark_published(order_id: int, msg_ids: list[int]) -> None:
                      channel_msgs=json.dumps(msg_ids))
 
 
+async def set_channel_msgs(order_id: int, msg_ids: list[int]) -> None:
+    await _db.execute("UPDATE orders SET channel_msgs=? WHERE id=?", (json.dumps(msg_ids), order_id))
+    await _db.commit()
+
+
+async def pending_post_orders(window_sec: int = 6 * 3600) -> list[dict]:
+    """Kanalga yuborilgan, lekin Telegram hali haqiqiy post raqamini bermagan (0) e'lonlar."""
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE status='published' AND published_at>=? AND channel_msgs LIKE '[0%'",
+        (int(time.time()) - window_sec,))
+    return [_order(r) for r in await cur.fetchall()]
+
+
 async def awaiting_orders() -> list[dict]:
     cur = await _db.execute("SELECT * FROM orders WHERE status='awaiting_payment' ORDER BY id")
     return [_order(r) for r in await cur.fetchall()]
