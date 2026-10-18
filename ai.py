@@ -6,7 +6,7 @@ from typing import Awaitable, Callable
 
 from anthropic import AsyncAnthropic
 
-from config import (AD_PRICE, ANTHROPIC_API_KEY, CHANNEL_TITLE, CLAUDE_FAST_MODEL, CLICK_GROUP_ID,
+from config import (AD_PRICE, TARIFFS, ANTHROPIC_API_KEY, CHANNEL_TITLE, CLAUDE_FAST_MODEL, CLICK_GROUP_ID,
                     CLAUDE_MODEL, MAX_PHOTOS)
 from formatting import CATEGORY_STYLE, fmt_sum
 
@@ -28,6 +28,16 @@ QOIDALAR:
   kazino/bukmeker/stavka, kripto "daromad", qurol, dori-darmon, giyohvand, tamaki/alkogol, 18+, hujjat sotish,
   fol/sehr-jodu, aldov ehtimoli bor narsalar.
 - E'lon narxi: {fmt_sum(AD_PRICE)} so'm (sotuv ham, xizmat ham). 1 ta e'lon kanalga 1 marta joylanadi.
+  Narx so'ralsa — FAQAT shu 1 kunlik narxni ayt. Boshqa tariflarni o'zing taklif qilma.
+- UZOQ TARIFLAR — faqat mijoz o'zi so'rasa ("haftalik", "bir necha kun", "oylik", "ko'proq chiqarsa", "har kuni"):
+{chr(10).join(f"  • {d} kunlik — {fmt_sum(p)} so'm" for d, p in sorted(TARIFFS.items()) if d > 1)}
+  Shartlari: e'lon tarif davomida HAR KUNI 1 marta, har xil vaqtda (bir kun ertalab, bir kun tushda, bir kun kechqurun)
+  qayta chiqadi; eski postlar kanalda qoladi. Mijoz KUN ORA reklamaning rasm yoki videosini yangilab berishi kerak —
+  bot o'zi eslatib yozadi. Yangi material bermasa, oxirgi reklama qayta chiqaveradi.
+  Mijoz tarifni tanlasa — choose_tariff chaqir (keyin show_preview, narx yangilanadi). Tanlamasa — 1 kunlik.
+  To'lovdan keyin birinchi post darhol chiqadi, qolganlarini bot o'zi kunma-kun joylaydi.
+- FAOL TARIF davomida mijoz yangi rasm/video yoki yangi reklama matnini yuborsa — bu yangilanish: apply_to_campaign
+  chaqir va qisqa ayt ("Bo'ldi, keyingi post yangi rasm bilan chiqadi"). Yangi to'lov so'rama, show_preview qilma.
   To'lov Payme yoki Click orqali. {"Ikkalasi ham avtomatik tasdiqlanadi (aynan berilgan summa to'lansa)." if CLICK_GROUP_ID
   else "Payme avtomatik tasdiqlanadi, Click esa faqat CHEK SKRINSHOTI bilan."}
   To'lov silkasini SEN bermaysan — mijoz oldindan ko'rishni tasdiqlagach bot o'zi yuboradi. O'zingdan karta raqami yoki silka o'ylab topma.
@@ -149,6 +159,19 @@ TOOLS = [
                 "description": {"type": "string"},
             },
         },
+    },
+    {
+        "name": "choose_tariff",
+        "description": ("Mijoz uzoq tarifni tanlasa (3, 7 yoki 30 kun) — e'longa tarif belgilaydi. Faqat mijoz o'zi so'rab, "
+                        "rozi bo'lsa. 1 = oddiy bir martalik e'lon."),
+        "input_schema": {"type": "object", "properties": {"days": {"type": "integer", "enum": sorted(TARIFFS)}},
+                         "required": ["days"]},
+    },
+    {
+        "name": "apply_to_campaign",
+        "description": ("Mijozning FAOL TARIFI bor va u keyingi postlar uchun yangi rasm/video (yoki tayyor reklama matni) yubordi — "
+                        "shu yangi materialni tarifdagi e'longa o'rnatadi. Keyingi kunlik post shu bilan chiqadi."),
+        "input_schema": {"type": "object", "properties": {}},
     },
     {
         "name": "use_ready_ad",

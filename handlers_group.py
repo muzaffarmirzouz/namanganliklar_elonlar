@@ -16,7 +16,7 @@ from aiogram.types import Message, ReplyParameters
 
 import ai
 import db
-from config import (AD_PRICE, ADMIN_IDS, CLICK_GROUP_ID, CLICK_SOURCE_IDS, PAYMENT_GROUP_ID,
+from config import (AD_PRICE, TARIFFS, ADMIN_IDS, CLICK_GROUP_ID, CLICK_SOURCE_IDS, PAYMENT_GROUP_ID,
                     PAYMENT_SOURCE_IDS, UNIQUE_MAX_OFFSET)
 from formatting import fmt_sum
 from payments import extract_amounts, match_order
@@ -98,7 +98,8 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
 
     if info is None and not ai_amount:
         # AI ishlamadi. Matnda e'lon narxiga yaqin summa bo'lsa — to'lov bo'lishi mumkin, jim qolmaymiz
-        near = sorted(a for a in extract_amounts(text) if AD_PRICE <= a <= AD_PRICE + UNIQUE_MAX_OFFSET)
+        near = sorted(a for a in extract_amounts(text)
+                      if any(p <= a <= p + UNIQUE_MAX_OFFSET for p in TARIFFS.values()))
         if not near:
             return
         ai_amount = near[0]

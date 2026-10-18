@@ -168,3 +168,7 @@ def build_footer(channel_username: str, channel_title: str, bot_username: str) -
 
 def fmt_sum(n: int) -> str:
     return f"{n:,}".replace(",", " ")
+
+
+def tariff_name(days: int) -> str:
+    return "1 kunlik" if days == 1 else f"{days} kunlik"

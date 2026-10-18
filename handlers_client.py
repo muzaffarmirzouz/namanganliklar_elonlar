@@ -21,11 +21,11 @@ from aiogram.types import (BusinessConnection, CallbackQuery, InlineKeyboardButt
 import ai
 import db
 import publisher
-from config import (AD_PRICE, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
+from config import (AD_PRICE, TARIFFS, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
                     EDIT_WINDOW_DAYS, MAX_EDITS, SOLD_WINDOW_DAYS,
                     CLICK_GROUP_ID, CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
-from formatting import fmt_sum, is_service
+from formatting import fmt_sum, is_service, tariff_name
 from texts import LANG_NAMES, detect_lang, t as tr
 from payments import click_link, payme_link, pick_amount
 from services import to_group
@@ -68,6 +68,15 @@ _ai_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 _photo_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 _album_timers: dict[int, asyncio.Task] = {}
 _album_captions: dict[int, list[str]] = defaultdict(list)
+
+
+def order_days(order: dict) -> int:
+    d = int(order["data"].get("_days") or 1)
+    return d if d in TARIFFS else 1
+
+
+def order_price(order: dict) -> int:
+    return TARIFFS[order_days(order)]
 
 
 def missing_fields(order: dict) -> list[str]:
@@ -362,6 +371,15 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 ed_line = (f"KANALDAGI E'LON #{ed['id']} (tuzatish mumkin, qolgan bepul tuzatishlar: {max(left, 0)}): "
                            + json.dumps(ed_data, ensure_ascii=False)
                            + ". Mijoz undagi xatoni aytsa — edit_published chaqir, yangi e'lon ochma.")
+            camp = await db.user_campaign(uid)
+            if camp:
+                cd = camp["data"]
+                nxt = time.strftime("%d.%m %H:%M", time.localtime(int(cd.get("_camp_next") or 0)))
+                ed_line = (ed_line + "\n" if ed_line else "") + (
+                    f"FAOL TARIF: #{camp['id']} «{cd.get('title', '')}», {cd.get('_camp_days')} kunlik, "
+                    f"{cd.get('_camp_posted')}/{cd.get('_camp_days')} kun chiqdi, keyingisi taxminan {nxt}. "
+                    "Mijoz yangi rasm/video (yoki tayyor reklama matnini) yuborsa — bu YANGI E'LON EMAS: "
+                    "apply_to_campaign chaqir, to'lov so'rama.")
             live = await db.recent_published(uid, SOLD_WINDOW_DAYS * 86400)
             if live:
                 items = "; ".join(f"#{x['id']} «{x['data'].get('title', '')}»"
@@ -390,6 +408,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
                              "mijoz hammasini yozib javob beradi)" if business else "bot chati (tugmalar bor)"),
                 f"Buyurtma #{o['id']}, holati: {o['status']}",
                 "Qoralama: " + json.dumps(data, ensure_ascii=False),
+                f"Tanlangan tarif: {tariff_name(order_days(o))} — {fmt_sum(order_price(o))} so'm",
                 f"Media soni (rasm+video): {len(o['photos'])}",
                 ("TAYYOR REKLAMA rejimi: ha — mijoz matni o'zgartirilmasdan joylanadi" if o["data"].get("_ready") else
                  "Tayyor reklama nomzodi bor (use_ready_ad bilan qabul qilish mumkin): «"
@@ -426,6 +445,23 @@ async def run_ai(bot: Bot, uid: int, text: str):
         async def on_tool(name: str, args: dict) -> str:
             nonlocal want_preview, want_payment
             o = await db.active_order(uid)
+            if name == "apply_to_campaign":
+                camp = await db.user_campaign(uid)
+                if not camp:
+                    return "Mijozda faol tarif yo'q. Bu yangi e'lon bo'lsa — odatdagidek davom et."
+                if not o or o["status"] != "draft" or not (o["photos"] or o["data"].get("_ready_candidate")):
+                    return "Yangi rasm/video hali kelmagan — mijozdan yuborishini so'ra."
+                upd = {"_camp_refreshed": int(time.time())}
+                if o["photos"]:
+                    await db.set_photos(camp["id"], o["photos"][:10])
+                if o["data"].get("_ready_candidate") and camp["data"].get("_ready"):
+                    upd["_ready_html"] = o["data"]["_ready_candidate"]
+                await db.update_data(camp["id"], upd)
+                await db.set_status(o["id"], "cancelled")  # vaqtinchalik qoralama kerak emas
+                nxt = time.strftime("%d.%m %H:%M", time.localtime(int(camp["data"].get("_camp_next") or 0)))
+                await to_group(bot, f"🔄 #{camp['id']} «{escape(camp['data'].get('title', ''))}» — mijoz reklamani yangiladi "
+                                    f"({len(o['photos'])} ta media), keyingi post shu bilan chiqadi")
+                return f"Yangilandi. Keyingi post (taxminan {nxt}) yangi material bilan chiqadi. Mijozga qisqa ayt."
             if name == "edit_published":
                 return await edit_published(bot, uid, args)
             if name == "mark_sold":
@@ -473,6 +509,17 @@ async def run_ai(bot: Bot, uid: int, text: str):
                         "keyin update_ad.").format(o["id"])
             if o["status"] != "draft":
                 return "Hozir qoralamani o'zgartirib bo'lmaydi."
+            if name == "choose_tariff":
+                try:
+                    days = int(args.get("days") or 1)
+                except (TypeError, ValueError):
+                    days = 0
+                if days not in TARIFFS:
+                    return "Bunday tarif yo'q. Mavjud: " + ", ".join(f"{d} kun — {fmt_sum(p)} so'm" for d, p in sorted(TARIFFS.items()))
+                await db.update_data(o["id"], {"_days": days})
+                await db.set_preview_shown(o["id"], False)
+                return (f"Tarif tanlandi: {tariff_name(days)}, {fmt_sum(TARIFFS[days])} so'm. "
+                        + ("Agar e'lon tayyor bo'lsa — show_preview chaqir (narx yangilanadi)." ))
             if name == "use_ready_ad":
                 cand = o["data"].get("_ready_candidate") or o["data"].get("_ready_html")
                 if not cand and not o["photos"]:
@@ -611,6 +658,13 @@ async def close_ad(bot: Bot, uid: int, order_id: int | None, kind: str) -> str:
         await to_group(bot, f"❗️ #{o['id']} ga «{label}» qo'yib bo'lmadi: <code>{escape(str(e))[:300]}</code>")
         return "Kanal postini hozir o'zgartirib bo'lmadi, adminga xabar berildi. Mijozga admin tez orada belgilashini ayt."
     await db.update_data(o["id"], {flag: True})
+    # Tarifli e'lonning oldingi kunlardagi postlariga ham belgi qo'yamiz (telefon hamma joydan olinsin)
+    latest = o["channel_msgs"][0] if o["channel_msgs"] else 0
+    for old_id in [x for x in o["data"].get("_all_posts") or [] if x and x != latest]:
+        try:
+            await publisher.edit_post(bot, {**o, "channel_msgs": [old_id]})
+        except Exception as e:
+            log.warning("#%s eski post %s ni yopib bo'lmadi: %s", o["id"], old_id, e)
     await to_group(bot, f"{'🏷' if kind == 'sold' else '⛔️'} #{o['id']} «{escape(o['data'].get('title', ''))}» — "
                         f"mijoz so'rovi bilan «{label}» qo'yildi, telefon raqami olib tashlandi\n{link}")
     return f"Kanalda «{label}» deb belgilandi va telefon raqami olib tashlandi: {link}"
@@ -643,19 +697,22 @@ async def send_preview(bot: Bot, uid: int, order: dict):
     await publisher.send_ad(bot, uid, order, **kw)
     await db.set_preview_shown(order["id"], True)
     if kw:  # business lichka — tugmasiz, odamdek
-        await send_human(bot, uid, tr("preview_ask", await db.get_lang(uid), price=fmt_sum(AD_PRICE)), kw)
+        price = fmt_sum(order_price(order)) + (f" ({tariff_name(order_days(order))})" if order_days(order) > 1 else "")
+        await send_human(bot, uid, tr("preview_ask", await db.get_lang(uid), price=price), kw)
         return
     kb = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="✅ Hammasi to'g'ri — to'lovga o'tish", callback_data=f"ok:{order['id']}")],
         [InlineKeyboardButton(text="✏️ O'zgartirish", callback_data=f"edit:{order['id']}")],
     ])
-    await bot.send_message(uid, f"Tekshirib chiqing. E'lon narxi: <b>{fmt_sum(AD_PRICE)} so'm</b>.", reply_markup=kb)
+    tname = f" ({tariff_name(order_days(order))})" if order_days(order) > 1 else ""
+    await bot.send_message(uid, f"Tekshirib chiqing. E'lon narxi: <b>{fmt_sum(order_price(order))} so'm</b>{tname}.",
+                           reply_markup=kb)
 
 
 async def start_payment(bot: Bot, uid: int, o: dict):
     """Qoralamani to'lov kutish holatiga o'tkazib, mijozga summa va Payme silkasini yuboradi."""
     if o["status"] == "draft":
-        amount = pick_amount(await db.reserved_amounts())
+        amount = pick_amount(await db.reserved_amounts(), order_price(o))
         await db.request_payment(o["id"], amount)
         o = await db.get_order(o["id"])
         user = await db.get_user(uid) or {}
@@ -664,7 +721,8 @@ async def start_payment(bot: Bot, uid: int, o: dict):
         await to_group(bot, f"🆕 #{o['id']} to'lov kutilmoqda: <b>{fmt_sum(amount)} so'm</b> ({source})\n"
                             f"👤 <a href=\"tg://user?id={uid}\">{name}</a>"
                             + (f" (@{user['username']})" if user.get("username") else "")
-                            + f"\n📦 {escape(o['data'].get('title', ''))}")
+                            + f"\n📦 {escape(o['data'].get('title', ''))}"
+                            + (f"\n📅 Tarif: {tariff_name(order_days(o))}" if order_days(o) > 1 else ""))
     if o["status"] == "awaiting_payment":
         await send_payment_message(bot, uid, o)
 

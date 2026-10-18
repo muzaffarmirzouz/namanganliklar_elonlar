@@ -31,6 +31,14 @@ CLAUDE_FAST_MODEL = os.getenv("CLAUDE_FAST_MODEL", "claude-haiku-5-5")  # to'lov
 
 # --- Narx va to'lov ---
 AD_PRICE = int(os.getenv("AD_PRICE", "50000"))
+# Tariflar: "kun:narx". 1 kunlik — AD_PRICE. Uzoq tarifda e'lon har kuni 1 marta, har xil vaqtda qayta chiqadi
+TARIFFS = {1: AD_PRICE}
+for _part in os.getenv("TARIFFS", "3:135000,7:300000,30:1200000").replace(" ", "").split(","):
+    if ":" in _part:
+        _d, _p = _part.split(":", 1)
+        TARIFFS[int(_d)] = int(_p)
+# Kunlik qayta joylash vaqt oraliqlari (soat, Toshkent vaqti) — har kuni navbatma-navbat
+POST_SLOTS = [(8, 11), (12, 15), (17, 21)]
 # 1 = har bir buyurtmaga noyob summa (50 001 ... 50 999) — to'lovni aniq topish uchun
 UNIQUE_AMOUNT = os.getenv("UNIQUE_AMOUNT", "1") == "1"
 UNIQUE_MAX_OFFSET = int(os.getenv("UNIQUE_MAX_OFFSET", "999"))

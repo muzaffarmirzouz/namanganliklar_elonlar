@@ -7,13 +7,15 @@ from config import (AD_PRICE, CLICK_LINK, PAYME_ACCOUNT_KEY, PAYME_LINK, PAYME_M
                     UNIQUE_AMOUNT, UNIQUE_MAX_OFFSET)
 
 
-def pick_amount(used_amounts: set[int]) -> int:
+def pick_amount(used_amounts: set[int], base: int | None = None) -> int:
     """Har bir kutilayotgan buyurtmaga boshqalardan farq qiladigan summa beradi.
-    Masalan 50 000 o'rniga 50 037 — shunda Payme xabaridagi summadan kim to'laganini aniq bilamiz."""
+    Masalan 50 000 o'rniga 50 037 (yoki 7 kunlik 300 000 o'rniga 300 412) — shunda to'lov xabaridagi summadan
+    kim to'laganini aniq bilamiz."""
+    base = base or AD_PRICE
     if not UNIQUE_AMOUNT:
-        return AD_PRICE
-    free = [AD_PRICE + i for i in range(1, UNIQUE_MAX_OFFSET + 1) if AD_PRICE + i not in used_amounts]
-    return random.choice(free) if free else AD_PRICE
+        return base
+    free = [base + i for i in range(1, UNIQUE_MAX_OFFSET + 1) if base + i not in used_amounts]
+    return random.choice(free) if free else base
 
 
 def payme_link(amount: int, order_id: int) -> str:

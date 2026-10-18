@@ -17,6 +17,7 @@ import handlers_admin  # noqa: E402
 import handlers_client  # noqa: E402
 import handlers_group  # noqa: E402
 import publisher  # noqa: E402
+import services  # noqa: E402
 import userbot  # noqa: E402
 from formatting import fmt_sum  # noqa: E402
 from services import notify_user, to_group  # noqa: E402
@@ -37,12 +38,13 @@ def check_config():
 
 
 async def housekeeping(bot: Bot):
-    """Har 5 daqiqada: muddati o'tgan to'lovlarni yopish, kerak bo'lsa eski e'lonlarni o'chirish."""
+    """Har daqiqada: muddati o'tgan to'lovlarni yopish, tarifli e'lonlarni joylash, kerak bo'lsa eskilarini o'chirish."""
     while True:
         try:
             for o in await db.expired_awaiting(config.PAYMENT_TTL_HOURS * 3600):
                 await db.set_status(o["id"], "expired")
                 await notify_user(bot, o["user_id"], "expired", id=o["id"], amount=fmt_sum(o["amount"]))
+            await services.run_campaigns(bot)
             if config.AUTO_DELETE_HOURS > 0:
                 for o in await db.to_autodelete(config.AUTO_DELETE_HOURS * 3600):
                     try:
@@ -52,7 +54,7 @@ async def housekeeping(bot: Bot):
                     await db.mark_deleted(o["id"])
         except Exception:
             log.exception("housekeeping xatosi")
-        await asyncio.sleep(300)
+        await asyncio.sleep(60)
 
 
 async def main():

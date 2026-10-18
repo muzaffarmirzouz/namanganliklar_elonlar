@@ -284,6 +284,20 @@ async def pending_post_orders(window_sec: int = 6 * 3600) -> list[dict]:
     return [_order(r) for r in await cur.fetchall()]
 
 
+async def active_campaigns() -> list[dict]:
+    """Uzoq tarifli (har kuni qayta chiqadigan) va hali tugamagan e'lonlar."""
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE status='published' AND data LIKE '%\"_camp_active\": true%' ORDER BY id")
+    return [_order(r) for r in await cur.fetchall()]
+
+
+async def user_campaign(user_id: int) -> dict | None:
+    cur = await _db.execute(
+        "SELECT * FROM orders WHERE user_id=? AND status='published' AND data LIKE '%\"_camp_active\": true%' "
+        "ORDER BY id DESC LIMIT 1", (user_id,))
+    return _order(await cur.fetchone())
+
+
 async def awaiting_orders() -> list[dict]:
     cur = await _db.execute("SELECT * FROM orders WHERE status='awaiting_payment' ORDER BY id")
     return [_order(r) for r in await cur.fetchall()]

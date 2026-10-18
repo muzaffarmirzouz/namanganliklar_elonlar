@@ -123,6 +123,26 @@ T = {
         "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nМижозларингиз кўп бўлсин! 🙂\n\nЭълон каналда сақланиб қолади. Хизматни тўхтатсангиз, шу ерга ёзинг — «тўхтатилди» деб белгилаб, рақамингизни олиб ташлаймиз",
         "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nПобольше вам клиентов! 🙂\n\nОбъявление остаётся в канале. Если прекратите оказывать услугу — напишите сюда, отметим «остановлено» и уберём ваш номер",
     },
+    "campaign_started": {
+        "uz_latn": "Tarifingiz: {days} kun. E'loningiz har kuni 1 marta, har xil vaqtda chiqib turadi. Kun ora o'zim yozaman — rasm yoki videoni yangilab turamiz",
+        "uz_cyrl": "Тарифингиз: {days} кун. Эълонингиз ҳар куни 1 марта, ҳар хил вақтда чиқиб туради. Кун ора ўзим ёзаман — расм ёки видеони янгилаб турамиз",
+        "ru": "Ваш тариф: {days} дн. Объявление будет выходить раз в день в разное время. Через день я напишу — будем обновлять фото или видео",
+    },
+    "campaign_posted": {
+        "uz_latn": "Bugungi reklamangiz chiqdi ({n}/{days}-kun) 👇\n{link}",
+        "uz_cyrl": "Бугунги рекламангиз чиқди ({n}/{days}-кун) 👇\n{link}",
+        "ru": "Сегодняшняя публикация вышла ({n}/{days}) 👇\n{link}",
+    },
+    "campaign_refresh": {
+        "uz_latn": "Assalomu alaykum! Ertangi reklamani yangilaymizmi? Yangi rasm yoki video tashlang — shu bilan chiqaramiz. Tashlamasangiz, oldingisi bilan chiqaveradi",
+        "uz_cyrl": "Ассалому алайкум! Эртанги рекламани янгилаймизми? Янги расм ёки видео ташланг — шу билан чиқарамиз. Ташламасангиз, олдингиси билан чиқаверади",
+        "ru": "Здравствуйте! Обновим завтрашнюю публикацию? Пришлите новое фото или видео — выйдет с ним. Если не пришлёте, выйдет прежний вариант",
+    },
+    "campaign_done": {
+        "uz_latn": "{days} kunlik tarifingiz tugadi — e'loningiz {days} kun davomida chiqdi. Davom ettiramizmi? Yozing 🙂",
+        "uz_cyrl": "{days} кунлик тарифингиз тугади — эълонингиз {days} кун давомида чиқди. Давом эттирамизми? Ёзинг 🙂",
+        "ru": "Ваш тариф на {days} дн. завершён — объявление выходило {days} дн. Продлим? Напишите 🙂",
+    },
     "published_link": {
         "uz_latn": "E'loningizning aniq silkasi 👇\n{link}",
         "uz_cyrl": "Эълонингизнинг аниқ силкаси 👇\n{link}",
