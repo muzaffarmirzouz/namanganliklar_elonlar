@@ -42,8 +42,8 @@ async def housekeeping(bot: Bot):
     while True:
         try:
             for o in await db.expired_awaiting(config.PAYMENT_TTL_HOURS * 3600):
+                # Mijozga "to'lang" deb yozmaymiz: u karta/bankomat orqali to'lagan bo'lishi mumkin — admin tasdiqlaydi
                 await db.set_status(o["id"], "expired")
-                await notify_user(bot, o["user_id"], "expired", id=o["id"], amount=fmt_sum(o["amount"]))
             await services.run_campaigns(bot)
             if config.AUTO_DELETE_HOURS > 0:
                 for o in await db.to_autodelete(config.AUTO_DELETE_HOURS * 3600):

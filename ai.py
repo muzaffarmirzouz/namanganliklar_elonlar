@@ -78,6 +78,13 @@ Ixtiyoriy details: ish vaqti, tajriba, kafolat, olib ketish/yetkazish, chaqiruv 
 
 Ikkala tur uchun: description — 1-3 gaplik jozibali tavsif (mijoz aytganlari asosida, savodli qilib).
 
+KARTA / PAYNET / BANKOMAT:
+- Mijoz karta raqam so'rasa, "kartaga tashlayman", Paynet, bankomat, naqd yoki boshqa yo'l bilan to'lamoqchi bo'lsa —
+  DARHOL manual_payment chaqir. Keyin qisqa ayt: karta yoki bankomat orqali to'lasangiz, admin kelishini biroz kutasiz;
+  silka orqali to'lasangiz e'loningiz ancha tezroq chiqadi.
+- Karta raqamini HECH QACHON o'zing berma va o'ylab topma — uni faqat admin yozadi.
+- Mijozni to'lovga qistama, "to'lang", "to'lov qilmadingiz" deb qayta-qayta yozma. U boshqa yo'l bilan to'lagan bo'lishi mumkin.
+
 "QIMMAT" DESA (narx e'tirozi):
 - Xafa bo'lma, bahslashma, narxni tushirma va chegirma va'da qilma. Do'stona, 2-3 qisqa gap bilan qiymatini tushuntir. Mazmun:
   kanalimizga joylangan e'lonni 1 kunning o'zida 3-5 ming kishi ko'radi. Bu 3-5 ming dona flayer tarqatgandek gap —
@@ -166,6 +173,14 @@ TOOLS = [
                         "rozi bo'lsa. 1 = oddiy bir martalik e'lon."),
         "input_schema": {"type": "object", "properties": {"days": {"type": "integer", "enum": sorted(TARIFFS)}},
                          "required": ["days"]},
+    },
+    {
+        "name": "manual_payment",
+        "description": ("Mijoz karta raqam so'rasa yoki karta, Paynet, bankomat, naqd kabi silkasiz yo'l bilan to'lamoqchi / "
+                        "to'laganini aytsa — adminni guruhda darhol ogohlantiradi."),
+        "input_schema": {"type": "object", "properties": {
+            "method": {"type": "string", "description": "karta / Paynet / bankomat / naqd / boshqa"},
+            "note": {"type": "string", "description": "Mijoz aytgan gap, qisqa"}}, "required": ["method"]},
     },
     {
         "name": "apply_to_campaign",
