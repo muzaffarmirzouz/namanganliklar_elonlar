@@ -728,26 +728,29 @@ async def start_payment(bot: Bot, uid: int, o: dict):
 
 
 async def send_payment_message(bot: Bot, uid: int, o: dict):
-    """To'lov ma'lumoti mijoz tilida. Lichkada — bo'lib-bo'lib, odamdek; bot chatida — bitta xabar + tugmalar."""
+    """To'lov ma'lumoti — BITTA qisqa xabar, mijoz tilida: summa, Payme va Click silkalari, qidiruv nomi."""
     kw = await db.send_kw(uid)
     lang = await db.get_lang(uid)
     link = payme_link(o["amount"], o["id"])
-    amount = fmt_sum(o["amount"])
-    msgs = [tr("pay_amount", lang, amount=amount) + (tr("pay_exact", lang) if UNIQUE_AMOUNT else "")]
-    msgs.append(tr("pay_link", lang, link=link, payme=PAYME_SEARCH_NAME) if link
-                else tr("pay_nolink", lang, payme=PAYME_SEARCH_NAME))
     clink = click_link(o["amount"], o["id"]) if CLICK_ENABLED else ""
-    if CLICK_ENABLED:
-        if clink:
-            msgs.append(tr("pay_click_link" if CLICK_GROUP_ID else "pay_click_link_receipt", lang,
-                           link=clink, click=CLICK_SEARCH_NAME))
-        else:
-            msgs.append(tr("pay_click_auto" if CLICK_GROUP_ID else "pay_click", lang, click=CLICK_SEARCH_NAME))
-    msgs.append(tr("pay_after", lang))
 
-    if kw:  # business lichka
-        for msg in msgs:
-            await send_human(bot, uid, msg, kw)
+    lines = ["💳 " + tr("pay_head", lang, amount=fmt_sum(o["amount"])), ""]
+    if link:
+        lines.append(f"Payme: {link}")
+    if clink:
+        lines.append(f"Click: {clink}")
+    names = [f"«{PAYME_SEARCH_NAME}» (Payme)"] + ([f"«{CLICK_SEARCH_NAME}» (Click)"] if CLICK_ENABLED else [])
+    lines += ["", tr("pay_search", lang, names=", ".join(names)),
+              tr("pay_foot_click_receipt" if CLICK_ENABLED and not CLICK_GROUP_ID else "pay_foot", lang)]
+    text = "\n".join(lines)
+
+    if kw:  # business lichka — tugmasiz, bitta xabar, silka kartochkalarisiz
+        try:
+            await bot.send_chat_action(uid, ChatAction.TYPING, **kw)
+        except Exception:
+            pass
+        await asyncio.sleep(2)
+        await bot.send_message(uid, text, parse_mode=None, disable_web_page_preview=True, **kw)
         return
     rows = []
     if link:
@@ -755,7 +758,7 @@ async def send_payment_message(bot: Bot, uid: int, o: dict):
     if clink:
         rows.append([InlineKeyboardButton(text=tr("btn_click", lang), url=clink)])
     rows.append([InlineKeyboardButton(text=tr("btn_cancel", lang), callback_data=f"cancel:{o['id']}")])
-    await bot.send_message(uid, "💳 " + "\n\n".join(msgs), parse_mode=None, disable_web_page_preview=True,
+    await bot.send_message(uid, text, parse_mode=None, disable_web_page_preview=True,
                            reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 

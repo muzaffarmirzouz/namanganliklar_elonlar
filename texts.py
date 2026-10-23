@@ -91,6 +91,27 @@ T = {
         "ru": "Через Click: {link}\n\nЕсли ссылка не открывается, найдите в приложении Click «{click}». Если платите через Click, обязательно пришлите сюда скриншот чека — без чека подтвердить не смогу",
     },
     "btn_click": {"uz_latn": "🔵 Click orqali to'lash", "uz_cyrl": "🔵 Click орқали тўлаш", "ru": "🔵 Оплатить через Click"},
+    # --- Bitta qisqa to'lov xabari ---
+    "pay_head": {
+        "uz_latn": "To'lov: {amount} so'm — aynan shu summani to'lang",
+        "uz_cyrl": "Тўлов: {amount} сўм — айнан шу суммани тўланг",
+        "ru": "Оплата: {amount} сум — переведите именно эту сумму",
+    },
+    "pay_search": {
+        "uz_latn": "Silka ochilmasa, ilovada qidiring: {names}",
+        "uz_cyrl": "Силка очилмаса, иловада қидиринг: {names}",
+        "ru": "Если ссылка не открывается, найдите в приложении: {names}",
+    },
+    "pay_foot": {
+        "uz_latn": "To'lov tushishi bilan e'loningiz kanalga chiqadi.",
+        "uz_cyrl": "Тўлов тушиши билан эълонингиз каналга чиқади.",
+        "ru": "Как только оплата поступит, объявление выйдет в канале.",
+    },
+    "pay_foot_click_receipt": {
+        "uz_latn": "To'lov tushishi bilan e'loningiz kanalga chiqadi. Click'dan to'lasangiz, chek skrinshotini shu yerga tashlang.",
+        "uz_cyrl": "Тўлов тушиши билан эълонингиз каналга чиқади. Click'дан тўласангиз, чек скриншотини шу ерга ташланг.",
+        "ru": "Как только оплата поступит, объявление выйдет. Если платите через Click, пришлите сюда скриншот чека.",
+    },
     "pay_after": {
         "uz_latn": "To'lov tushishi bilan e'loningizni kanalga chiqarib yuboraman. Agar 10 daqiqada chiqmasa, to'lov chekining skrinshotini shu yerga tashlab qo'ying",
         "uz_cyrl": "Тўлов тушиши билан эълонингизни каналга чиқариб юбораман. Агар 10 дақиқада чиқмаса, тўлов чекининг скриншотини шу ерга ташлаб қўйинг",
