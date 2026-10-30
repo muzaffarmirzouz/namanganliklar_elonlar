@@ -45,6 +45,7 @@ async def housekeeping(bot: Bot):
                 # Mijozga "to'lang" deb yozmaymiz: u karta/bankomat orqali to'lagan bo'lishi mumkin — admin tasdiqlaydi
                 await db.set_status(o["id"], "expired")
             await services.run_campaigns(bot)
+            await services.remind_unpublished(bot)
             if config.AUTO_DELETE_HOURS > 0:
                 for o in await db.to_autodelete(config.AUTO_DELETE_HOURS * 3600):
                     try:
@@ -60,6 +61,11 @@ async def housekeeping(bot: Bot):
 async def main():
     check_config()
     await db.init()
+    # Yangi "avval to'lov" tartibidan oldin to'langan e'lonlarga tegmaymiz (eslatma/avto-joylash bo'lmasin)
+    for o in await db.paid_unpublished():
+        if "_confirmed" not in o["data"]:
+            now = int(time.time())
+            await db.update_data(o["id"], {"_confirmed": True, "_auto_pub": now, "_rem_client": now, "_rem_admin": now})
     bot = Bot(config.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     me = await bot.get_me()
     publisher.BOT_USERNAME = me.username

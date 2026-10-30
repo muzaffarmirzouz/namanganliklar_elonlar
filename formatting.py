@@ -31,11 +31,22 @@ CATEGORY_STYLE = {
     "xizmat_talim":     ("📚", "TALIM_REPETITOR"),      # repetitor, til kurslari (oflayn)
     "xizmat_tadbir":    ("🎉", "TADBIR_XIZMATI"),       # to'y, foto/video, oshpaz, dekor
     "xizmat_boshqa":    ("🤝", "XIZMAT"),
+    # --- Ish ---
+    "ish_taklif":       ("💼", "ISHCHI_KERAK"),         # vakansiya: ishchi, sotuvchi, haydovchi, usta kerak va h.k.
 }
 
 
 def is_service(data: dict) -> bool:
     return str(data.get("category", "")).startswith("xizmat_")
+
+
+def is_job(data: dict) -> bool:
+    return data.get("category") == "ish_taklif"
+
+
+def is_nonsale(data: dict) -> bool:
+    """Sotuv emas (xizmat yoki vakansiya): rasm ixtiyoriy, "SOTILDI" qo'yilmaydi."""
+    return is_service(data) or is_job(data)
 
 
 CAPTION_LIMIT = 1024  # Telegram rasm izohi chegarasi
@@ -101,25 +112,30 @@ def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> s
     emoji, tag = CATEGORY_STYLE.get(data.get("category", "boshqa"), CATEGORY_STYLE["boshqa"])
 
     service = is_service(data)
+    job = is_job(data)
     closed = closed_head(data)
     if data.get("_stopped"):
         head = [STOP_HEAD, "", f"{emoji} <b>#{tag}</b> | #TOXTATILDI", ""]
-    elif data.get("_sold") and not service:
+    elif data.get("_sold") and not (service or job):
         head = [SOLD_HEAD, "", f"{emoji} <b>#{tag}</b> | #SOTILDI", ""]
     else:
-        head = [f"{emoji} <b>#{tag}</b> | {'#XIZMAT' if service else '#SOTILADI'}", ""]
+        kind_tag = "#ISH_TAKLIFI" if job else "#XIZMAT" if service else "#SOTILADI"
+        head = [f"{emoji} <b>#{tag}</b> | {kind_tag}", ""]
     if data.get("title"):
         head.append(f"<b>{_e(str(data['title']).upper())}</b>")
         head.append("")
 
     info = []
     if data.get("price"):
-        info.append(f"💰 <b>Narxi:</b> {_e(data['price'])}")
+        info.append(f"💰 <b>{'Maosh' if job else 'Narxi'}:</b> {_e(data['price'])}")
     if data.get("location"):
-        info.append(f"📍 <b>{'Hudud' if service else 'Manzil'}:</b> {_e(data['location'])}")
-    if data.get("condition") and not service:
+        info.append(f"📍 <b>{'Ish joyi' if job else 'Hudud' if service else 'Manzil'}:</b> {_e(data['location'])}")
+    if data.get("condition") and not (service or job):
         info.append(f"✨ <b>Holati:</b> {_e(data['condition'])}")
-    for line in data.get("details") or []:
+    details = data.get("details") or []
+    if isinstance(details, str):  # AI ba'zan ro'yxat o'rniga matn yuboradi
+        details = [x.strip() for x in details.replace(";", "\n").split("\n") if x.strip()]
+    for line in details:
         info.append(f"▫️ {_e(line)}")
 
     contact = []
@@ -142,7 +158,7 @@ def build_caption(data: dict, footer: str = "", limit: int = CAPTION_LIMIT) -> s
     desc = _e(data.get("description", ""))
     if closed:
         desc = strip_phones(desc)
-        info = [x if "Narxi:" in x else strip_phones(x) for x in info]  # narx qatoriga tegmaymiz
+        info = [x if ("Narxi:" in x or "Maosh:" in x) else strip_phones(x) for x in info]  # narx/maoshga tegmaymiz
     text = assemble(desc)
     # Sig'masa — tavsifni qisqartiramiz (HTML teglar buzilmasligi uchun faqat tavsifni kesamiz)
     while visible_len(text) > limit and desc:

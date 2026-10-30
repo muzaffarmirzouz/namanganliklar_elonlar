@@ -199,6 +199,31 @@ T = {
         "uz_cyrl": "Маълумотни матн билан ёзинг, расм ва видеоларни эса файл эмас, оддий расм/видео қилиб ташланг 📸",
         "ru": "Пишите информацию текстом, а фото и видео отправляйте не файлом, а обычным фото/видео 📸",
     },
+    "preview_ask_paid": {
+        "uz_latn": "Kanalda shunaqa chiqadi. Hammasi to'g'rimi? To'g'ri bo'lsa «ha» deb yozing — darrov joylayman. To'g'irlash kerak bo'lsa ayting",
+        "uz_cyrl": "Каналда шунақа чиқади. Ҳаммаси тўғрими? Тўғри бўлса «ҳа» деб ёзинг — дарров жойлайман. Тўғирлаш керак бўлса айтинг",
+        "ru": "Вот так объявление будет выглядеть в канале. Всё верно? Если да — напишите «да», сразу опубликую. Если нужно что-то исправить — скажите",
+    },
+    "preview_ask_awaiting": {
+        "uz_latn": "Kanalda shunaqa chiqadi. Hammasi to'g'rimi? To'g'ri bo'lsa «ha» deb yozing — to'lov tushishi bilan joylanadi. To'g'irlash kerak bo'lsa ayting",
+        "uz_cyrl": "Каналда шунақа чиқади. Ҳаммаси тўғрими? Тўғри бўлса «ҳа» деб ёзинг — тўлов тушиши билан жойланади. Тўғирлаш керак бўлса айтинг",
+        "ru": "Вот так объявление будет выглядеть в канале. Всё верно? Если да — напишите «да», опубликуем сразу после оплаты. Если нужно что-то исправить — скажите",
+    },
+    "paid_collect": {
+        "uz_latn": "To'lov tushdi, rahmat! ✅ Endi e'loningizni tayyorlaymiz",
+        "uz_cyrl": "Тўлов тушди, раҳмат! ✅ Энди эълонингизни тайёрлаймиз",
+        "ru": "Оплата поступила, спасибо! ✅ Теперь подготовим ваше объявление",
+    },
+    "paid_collect_reminder": {
+        "uz_latn": "Assalomu alaykum! To'lovingiz tushgan, e'loningiz tayyorlashni kutib turibdi 🙂 Ma'lumotlar va rasmlarni yuborsangiz, darrov joylab beraman",
+        "uz_cyrl": "Ассалому алайкум! Тўловингиз тушган, эълонингиз тайёрлашни кутиб турибди 🙂 Маълумотлар ва расмларни юборсангиз, дарров жойлаб бераман",
+        "ru": "Здравствуйте! Оплата получена, объявление ждёт подготовки 🙂 Пришлите информацию и фото — сразу опубликую",
+    },
+    "published_job": {
+        "uz_latn": "Tayyor, e'loningiz kanalda 👇\n{link}\n\nYaxshi ishchi tez topilsin! 🙂\n\nE'lon kanalda saqlanib qoladi. Ishchi topilsa, shu yerga yozing — «to'xtatildi» deb belgilab, raqamingizni olib tashlaymiz",
+        "uz_cyrl": "Тайёр, эълонингиз каналда 👇\n{link}\n\nЯхши ишчи тез топилсин! 🙂\n\nЭълон каналда сақланиб қолади. Ишчи топилса, шу ерга ёзинг — «тўхтатилди» деб белгилаб, рақамингизни олиб ташлаймиз",
+        "ru": "Готово, ваше объявление в канале 👇\n{link}\n\nПусть хороший работник найдётся быстро! 🙂\n\nОбъявление остаётся в канале. Когда найдёте работника — напишите сюда, отметим «остановлено» и уберём ваш номер",
+    },
     "ack": {
         "uz_latn": "Xo'p, tushundim 👍",
         "uz_cyrl": "Хўп, тушундим 👍",

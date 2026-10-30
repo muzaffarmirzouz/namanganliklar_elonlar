@@ -25,9 +25,11 @@ from config import (AD_PRICE, TARIFFS, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHAN
                     EDIT_WINDOW_DAYS, MAX_EDITS, SOLD_WINDOW_DAYS,
                     CLICK_GROUP_ID, CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
-from formatting import fmt_sum, is_service, tariff_name
+from formatting import fmt_sum, is_job, is_nonsale, is_service, tariff_name
 from texts import LANG_NAMES, detect_lang, t as tr
 from payments import click_link, payme_link, pick_amount
+from order_rules import known_item, missing_fields, order_days, order_price, ready_to_publish
+import services
 from services import to_group
 
 log = logging.getLogger(__name__)
@@ -46,9 +48,6 @@ MAIN_KB = ReplyKeyboardMarkup(
     input_field_placeholder="Nima sotasiz yoki qanday xizmat? Yozing…",
 )
 
-REQUIRED = {"category": "kategoriya", "title": "sarlavha", "price": "narx",
-            "location": "manzil", "phone": "telefon"}
-
 RULES = (
     f"📌 <b>{escape(CHANNEL_TITLE)}</b> — e'lon berish qoidalari\n\n"
     f"💰 Narxi: <b>{fmt_sum(AD_PRICE)} so'm</b> — 1 ta e'lon, kanalga 1 marta joylanadi.\n"
@@ -57,9 +56,10 @@ RULES = (
     "✅ Qabul qilinadi:\n"
     "• <b>sotuv</b> — uy-joy, avtomobil, texnika, telefon, mebel, qurilish mollari, kiyim, chorva va boshqalar;\n"
     "• <b>xizmat ko'rsatish</b> — gilam yuvish, tozalash, santexnik, elektrik, ta'mirlash, yuk tashish, "
-    "avtoservis, repetitor, to'y-tadbir xizmatlari va h.k.\n"
+    "avtoservis, repetitor, to'y-tadbir xizmatlari va h.k.;\n"
+    "• <b>ishga taklif</b> — ishchi, sotuvchi, haydovchi, usta kerak va h.k.\n"
     "⛔️ Qabul qilinmaydi: Telegram kanal/guruh/bot reklamalari, yangilik kanallari, onlayn kurs va "
-    "\"pul topish\" reklamalari, vakansiyalar, kredit, stavka, 18+ va taqiqlangan narsalar.\n\n"
+    "\"pul topish\" reklamalari, kredit, stavka, 18+ va taqiqlangan narsalar.\n\n"
     "📸 Sotuvda 3-4 ta sifatli rasm yoki video yuboring — albom qilib chiroyli joylab beramiz. Xizmatda rasm ixtiyoriy.\n"
     "📝 Tayyor reklamangiz bo'lsa (rasm/video + matn), shunchaki yuboring yoki forward qiling — o'zgartirmasdan joylaymiz."
 )
@@ -68,24 +68,6 @@ _ai_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 _photo_locks: dict[int, asyncio.Lock] = defaultdict(asyncio.Lock)
 _album_timers: dict[int, asyncio.Task] = {}
 _album_captions: dict[int, list[str]] = defaultdict(list)
-
-
-def order_days(order: dict) -> int:
-    d = int(order["data"].get("_days") or 1)
-    return d if d in TARIFFS else 1
-
-
-def order_price(order: dict) -> int:
-    return TARIFFS[order_days(order)]
-
-
-def missing_fields(order: dict) -> list[str]:
-    if order["data"].get("_ready"):  # tayyor reklama: faqat mazmuni bo'lsa yetarli
-        return [] if (order["photos"] or order["data"].get("_ready_html")) else ["tayyor reklama mazmuni"]
-    miss = [name for key, name in REQUIRED.items() if not order["data"].get(key)]
-    if not order["photos"] and not is_service(order["data"]):  # xizmat e'lonida rasm ixtiyoriy
-        miss.append("kamida 1 ta rasm")
-    return miss
 
 
 async def remember(m: Message) -> None:
@@ -176,13 +158,14 @@ async def btn_new(m: Message):
                        f"Avval uni to'lang yoki «{BTN_CANCEL}» ni bosing.")
         return
     if o and o["status"] == "paid":
-        await m.answer("Oldingi e'loningiz hozir joylanmoqda, biroz kuting 🙏")
+        await m.answer("Oldingi e'loningiz uchun to'lov tushgan — avval uni tayyorlab joylaymiz 🙏" if not ready_to_publish(o)
+                       else "Oldingi e'loningiz hozir joylanmoqda, biroz kuting 🙏")
         return
     if o:
         await db.set_status(o["id"], "cancelled")
     await db.save_history(uid, [])
     await db.get_or_create_draft(uid)
-    await m.answer("Yangi e'lon boshladik ✍️\nNima sotasiz yoki qanday xizmat? Qisqacha yozing, sotuv bo'lsa 3-4 ta rasm yoki video ham yuboring. Tayyor reklamangiz bo'lsa — shunchaki tashlang.")
+    await m.answer("Yangi e'lon boshladik ✍️\nNima sotasiz, qanday xizmat yoki kimni ishga olmoqchisiz? Qisqacha yozing. Tayyor reklamangiz bo'lsa — shunchaki tashlang.")
 
 
 @router.message(F.text == BTN_CANCEL)
@@ -199,10 +182,10 @@ async def btn_my(m: Message, bot: Bot):
     if not o:
         await m.answer("Faol e'loningiz yo'q. «🆕 Yangi e'lon» ni bosing.")
         return
-    if o["status"] == "awaiting_payment":
+    miss = missing_fields(o)
+    if o["status"] == "awaiting_payment" and (miss or o["data"].get("_confirmed")):
         await send_payment_message(bot, uid, o)
         return
-    miss = missing_fields(o)
     if miss:
         await m.answer("E'loningiz tayyorlanmoqda. Yetishmayapti: " + ", ".join(miss))
     else:
@@ -214,7 +197,8 @@ async def cancel_active(uid: int) -> str:
     if not o:
         return "Faol e'loningiz yo'q."
     if o["status"] == "paid":
-        return "To'lov qabul qilingan, e'lon joylanmoqda — endi bekor qilib bo'lmaydi."
+        return ("To'lov qabul qilingan — bu e'lonni bekor qilib bo'lmaydi. Uni tayyorlab joylashni davom ettiramiz; "
+                "boshqa savol bo'lsa admin yordam beradi.")
     await db.set_status(o["id"], "cancelled")
     await db.save_history(uid, [])
     return "E'lon bekor qilindi. Yangi e'lon bermoqchi bo'lsangiz, yozing."
@@ -247,24 +231,24 @@ async def on_photo(m: Message, bot: Bot):
     kw = await db.send_kw(uid)
     o = await db.active_order(uid)
 
-    if o and o["status"] == "awaiting_payment":
-        if m.photo:
-            await forward_receipt(bot, m, o)
-        else:
-            await run_ai(bot, uid, "[Tizim: to'lov kutilayotganda mijoz video yubordi.]")
-        return
+    single_photo = bool(m.photo) and m.media_group_id is None  # chek hech qachon albom bo'lib kelmaydi
+    if o and o["status"] == "awaiting_payment" and single_photo:
+        # Avval to'lov, keyin e'lon: rasm chek bo'lsa — adminga, oddiy rasm bo'lsa — e'longa qo'shiladi.
+        # AI rasmni o'qiy olmasa — ehtiyot uchun adminga ham yuboriladi va e'longa ham qo'shiladi.
+        if await forward_receipt(bot, m, o, strict=False, forward_unknown=True):
+            return
     if not o and m.photo:
         # To'lov muddati o'tgan e'lon bormi? Bot "chekni shu yerga tashlang" degan — rasm chek bo'lsa, adminga
         expired = await db.recent_expired(uid)
         if expired and await forward_receipt(bot, m, expired, strict=False):
             return
-    if o and o["status"] == "paid":
-        await bot.send_message(uid, tr("paid_wait", await db.get_lang(uid)), **kw)
+    if o and o["status"] == "paid" and o["data"].get("_confirmed") and not missing_fields(o):
+        await bot.send_message(uid, tr("paid_wait", await db.get_lang(uid)), **kw)  # e'lon allaqachon joylanmoqda
         return
 
     item = m.photo[-1].file_id if m.photo else {"t": "video", "id": m.video.file_id}
     async with _photo_locks[uid]:
-        o = await db.get_or_create_draft(uid)
+        o = await db.active_order(uid) or await db.get_or_create_draft(uid)  # to'lov kutilayotgan/to'langan e'longa ham
         photos = o["photos"]
         if len(photos) >= MAX_PHOTOS:
             if m.media_group_id is None or uid not in _album_timers:
@@ -325,7 +309,7 @@ async def on_text(m: Message, bot: Bot):
     fwd = forward_source(m)
     if fwd or len(m.text) >= 80:
         o = await db.active_order(uid)
-        if not o or o["status"] == "draft":
+        if not o or not (o["status"] == "paid" and o["data"].get("_confirmed")):
             o = o or await db.get_or_create_draft(uid)
             await db.update_data(o["id"], {"_ready_candidate": m.html_text})
             if fwd:
@@ -358,6 +342,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
         history = await db.get_history(uid)
         want_preview = False
         want_payment = False
+        want_publish = False
 
         async def state() -> str:
             lang_line = (f"MIJOZ TILI: {LANG_NAMES.get(lang, lang)}. Javobni FAQAT shu tilda va shu yozuvda yoz "
@@ -383,7 +368,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
             live = await db.recent_published(uid, SOLD_WINDOW_DAYS * 86400)
             if live:
                 items = "; ".join(f"#{x['id']} «{x['data'].get('title', '')}»"
-                                  + (" — xizmat" if is_service(x["data"]) else "")
+                                  + (" — vakansiya" if is_job(x["data"]) else " — xizmat" if is_service(x["data"]) else "")
                                   + (" — SOTILDI belgisi bor" if x["data"].get("_sold") else "")
                                   + (" — TO'XTATILDI belgisi bor" if x["data"].get("_stopped") else "") for x in live)
                 ed_line = (ed_line + "\n" if ed_line else "") + "Mijozning kanaldagi e'lonlari (mark_sold / mark_stopped uchun): " + items
@@ -418,19 +403,32 @@ async def run_ai(bot: Bot, uid: int, text: str):
             ]
             miss = missing_fields(o)
             lines.append("Yetishmayapti: " + (", ".join(miss) if miss else "hech narsa — show_preview chaqirsa bo'ladi"))
+            lines.append("Mijoz tayyor e'lonni tasdiqlaganmi: " + ("ha" if o["data"].get("_confirmed") else "yo'q"))
             if ed_line:
                 lines.append(ed_line + " (Joriy qoralama — bu boshqa, yangi e'lon.)")
-            lines.append("E'lon turi: " + ("XIZMAT (rasm ixtiyoriy)" if is_service(o["data"]) else
+            lines.append("E'lon turi: " + ("VAKANSIYA / ISHCHI KERAK (rasm ixtiyoriy)" if is_job(o["data"]) else
+                                           "XIZMAT (rasm ixtiyoriy)" if is_service(o["data"]) else
                                            "SOTUV" if o["data"].get("category") else "hali aniqlanmagan"))
-            if o["status"] == "paid":
+            if o["status"] == "draft":
+                lines.append("BOSQICH: to'lovgacha. Nima e'lon qilinishi (category + title) aniq va qoidaga mos bo'lsa — "
+                             "darhol go_to_payment chaqir (avval to'lov, keyin e'lonni tayyorlaymiz). Hamma ma'lumot "
+                             "allaqachon bor bo'lsa — avval show_preview, mijoz 'ha' desa go_to_payment.")
+            if o["status"] == "paid" and o["data"].get("_confirmed") and not miss:
                 lines.append("To'lov qabul qilingan, e'lon kanalga joylanmoqda (kechiksa admin joylaydi). "
                              "Hech narsani o'zgartirma, mijozni biroz kutishga chaqir.")
+            elif o["status"] == "paid":
+                lines.append("BOSQICH: TO'LOV QABUL QILINGAN — endi e'lonni tayyorla. Yetishmayotganlarni bitta-ikkita "
+                             "savol bilan so'ra va update_ad bilan saqla; hammasi to'liq bo'lsa show_preview; mijoz "
+                             "'ha/to'g'ri' desa publish_now. To'lov haqida boshqa gapirma, tarifni o'zgartirib bo'lmaydi.")
             if o["data"].get("_manual_pay"):
                 lines.append(f"Mijoz {o['data']['_manual_pay']} orqali to'lamoqchi — adminga xabar berilgan. Uni to'lovga "
                              "QISTAMA, 'to'lang' deb takrorlama; admin o'zi hal qiladi.")
             if o["status"] == "awaiting_payment":
-                lines.append(f"Mijoz e'lonni tasdiqlagan va {fmt_sum(o['amount'])} so'm to'lashi kerak (aynan shu summa). "
-                             "Qoralamani endi o'zgartirib bo'lmaydi. To'lov tushgach e'lon avtomatik joylanadi. "
+                lines.append(f"BOSQICH: TO'LOV KUTILMOQDA — {fmt_sum(o['amount'])} so'm (aynan shu summa). "
+                             "To'lov silkasi yuborilgan; 'to'lang' deb QISTAMA. Shu orada mijoz ma'lumot/rasm yuborsa — "
+                             "update_ad bilan saqlayver (qoralamani to'ldirish mumkin). Hamma ma'lumot bo'lsa show_preview, "
+                             "mijoz 'ha' desa publish_now (to'lov tushishi bilan avtomatik joylanadi). "
+                             "To'lov tushgach e'lon tayyor bo'lmasa — bot o'zi xabar beradi va tayyorlashni davom ettirasan. "
                              "To'lagan bo'lsa-yu joylanmagan bo'lsa — to'lov chekining skrinshotini shu chatga yuborishini ayt. "
                              "Silkani (Payme yoki Click) qayta so'rasa go_to_payment chaqir — bot ikkalasini ham yuboradi. "
                              f"Silka ochilmayapti/ishlamayapti desa: Payme ilovasiga kirib qidiruvga «{PAYME_SEARCH_NAME}» "
@@ -446,7 +444,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
             return "\n".join(lines)
 
         async def on_tool(name: str, args: dict) -> str:
-            nonlocal want_preview, want_payment
+            nonlocal want_preview, want_payment, want_publish
             o = await db.active_order(uid)
             if name == "manual_payment":
                 method = str(args.get("method") or "boshqa")[:40]
@@ -505,15 +503,40 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 if o and o["status"] == "awaiting_payment":
                     want_payment = True
                     return "Bot to'lov ma'lumotini qayta yuboradi."
+                if o and o["status"] == "paid":
+                    return "To'lov allaqachon qabul qilingan. Endi e'lonni tayyorla (yetishmayotganini so'ra, keyin publish_now)."
                 if not o or o["status"] != "draft":
                     return "To'lovga o'tib bo'lmaydi: faol qoralama yo'q."
+                if not known_item(o):
+                    return ("Hali nima e'lon qilinishi aniq emas. Avval update_ad bilan category va title ni saqla "
+                            "(qoidaga mosligini tekshir), keyin go_to_payment.")
+                miss = missing_fields(o)
+                if not miss and not o["data"].get("_preview"):
+                    return "Hamma ma'lumot bor — avval show_preview chaqirib, mijozga tayyor e'lonni ko'rsat."
+                if not miss:
+                    await db.update_data(o["id"], {"_confirmed": True})  # mijoz ko'rib, 'ha' dedi
+                want_payment = True
+                return ("Bot javobingdan keyin to'lov summasi va silkalarni o'zi yuboradi. Sen silka yoki summa yozma — "
+                        + ("juda qisqa yoz, masalan: 'Zo'r 👍'." if not miss else
+                           "juda qisqa yoz: to'lov tushgach e'lonni birga tayyorlab, darrov joylaymiz; shu orada "
+                           "ma'lumot va rasmlarni ham yuborib qo'yishi mumkin."))
+            if name == "publish_now":
+                if not o or o["status"] not in ("draft", "awaiting_payment", "paid"):
+                    return "Joylanadigan e'lon yo'q."
                 if miss := missing_fields(o):
-                    return "Hali to'lovga o'tib bo'lmaydi. Yetishmayapti: " + ", ".join(miss)
+                    return "Hali joylab bo'lmaydi. Yetishmayapti: " + ", ".join(miss)
                 if not o["data"].get("_preview"):
                     return "Avval show_preview chaqirib, mijozga tayyor e'lonni ko'rsat."
+                await db.update_data(o["id"], {"_confirmed": True})
+                o = await db.get_order(o["id"])  # shu orada to'lov tushgan bo'lishi mumkin
+                if o["status"] == "paid":
+                    want_publish = True
+                    return "Bot e'lonni hozir kanalga joylaydi va silkasini o'zi yuboradi. Sen juda qisqa yoz: 'Zo'r, joylayapman 👍'."
+                if o["status"] == "awaiting_payment":
+                    return ("E'lon tasdiqlandi — to'lov tushishi bilan avtomatik joylanadi. Mijozga qisqa ayt; "
+                            "'to'lang' deb qistama.")
                 want_payment = True
-                return ("Bot javobingdan keyin to'lov summasi va Payme silkasini o'zi yuboradi. "
-                        "Sen silka yoki summa yozma — faqat juda qisqa yoz, masalan: 'Zo'r 👍'.")
+                return "E'lon tasdiqlandi. Bot to'lov silkasini o'zi yuboradi — sen faqat juda qisqa yoz."
             if name == "reset_ad":
                 # Yangi e'lon: joriy qoralama yoki TO'LANMAGAN e'lon yopiladi, to'langani tegilmaydi
                 if o and o["status"] == "paid":
@@ -526,12 +549,12 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 return "Yangi bo'sh qoralama ochildi" + old + ". Endi update_ad bilan ma'lumotlarni saqla."
             if not o:
                 o = await db.get_or_create_draft(uid)  # e'lon yo'q bo'lsa — yangisini ochamiz
-            if o["status"] == "awaiting_payment":
-                return ("Mijozning #{0} e'loni to'lov kutmoqda, uni o'zgartirib bo'lmaydi. Agar mijoz YANGI e'lon "
-                        "bermoqchi bo'lsa: eski to'lanmagan e'lon bekor bo'lishini aytib, rozi bo'lsa reset_ad chaqir, "
-                        "keyin update_ad.").format(o["id"])
-            if o["status"] != "draft":
+            if o["status"] == "paid" and o["data"].get("_confirmed") and not missing_fields(o):
+                return "E'lon to'langan va tasdiqlangan — hozir joylanmoqda. Endi o'zgartirib bo'lmaydi (joylangach edit_published)."
+            if o["status"] not in ("draft", "awaiting_payment", "paid"):
                 return "Hozir qoralamani o'zgartirib bo'lmaydi."
+            if name == "choose_tariff" and o["status"] == "paid":
+                return "To'lov allaqachon qabul qilingan — tarifni endi o'zgartirib bo'lmaydi. Kerak bo'lsa notify_admin."
             if name == "choose_tariff":
                 try:
                     days = int(args.get("days") or 1)
@@ -541,6 +564,12 @@ async def run_ai(bot: Bot, uid: int, text: str):
                     return "Bunday tarif yo'q. Mavjud: " + ", ".join(f"{d} kun — {fmt_sum(p)} so'm" for d, p in sorted(TARIFFS.items()))
                 await db.update_data(o["id"], {"_days": days})
                 await db.set_preview_shown(o["id"], False)
+                if o["status"] == "awaiting_payment" and order_days(o) != days:
+                    # Summa o'zgardi — yangi noyob summa bilan to'lovni qayta so'raymiz
+                    await db.set_status(o["id"], "draft")
+                    want_payment = True
+                    return (f"Tarif o'zgardi: {tariff_name(days)}, {fmt_sum(TARIFFS[days])} so'm. Bot yangi summa va "
+                            "silkalarni o'zi yuboradi (eski summa endi ishlamaydi) — sen qisqa yoz.")
                 return (f"Tarif tanlandi: {tariff_name(days)}, {fmt_sum(TARIFFS[days])} so'm. "
                         + ("Agar e'lon tayyor bo'lsa — show_preview chaqir (narx yangilanadi)." ))
             if name == "use_ready_ad":
@@ -594,6 +623,9 @@ async def run_ai(bot: Bot, uid: int, text: str):
             await send_preview(bot, uid, o)
         if want_payment and o:
             await start_payment(bot, uid, o)
+        if want_publish and o and o["status"] == "paid":
+            res = await services.publish_order(bot, o["id"])
+            await to_group(bot, res)
 
 
 EDITABLE = ("title", "price", "location", "phone", "telegram", "condition", "details", "description")
@@ -664,13 +696,14 @@ async def close_ad(bot: Bot, uid: int, order_id: int | None, kind: str) -> str:
             return "Bu raqamli e'lon mijozniki emas yoki kanalda yo'q. Ro'yxatdan to'g'risini tanla."
     else:
         open_ads = [x for x in live if not x["data"].get("_sold") and not x["data"].get("_stopped")
-                    and not (kind == "sold" and is_service(x["data"]))]
+                    and not (kind == "sold" and is_nonsale(x["data"]))]
         if len(open_ads) > 1:
             return ("Mijozning bir nechta e'loni bor: " + ", ".join(f"#{x['id']} «{x['data'].get('title', '')}»" for x in open_ads)
                     + ". Qaysi biri ekanini so'ra, keyin order_id bilan chaqir.")
         o = open_ads[0] if open_ads else live[0]
-    if kind == "sold" and is_service(o["data"]):
-        return "Bu xizmat e'loni — unga SOTILDI qo'yilmaydi. Mijoz xizmatni to'xtatgan bo'lsa mark_stopped chaqir."
+    if kind == "sold" and is_nonsale(o["data"]):
+        return ("Bu xizmat yoki vakansiya e'loni — unga SOTILDI qo'yilmaydi. Xizmat to'xtagan yoki ishchi topilgan bo'lsa "
+                "mark_stopped chaqir.")
     if o["data"].get("_sold") or o["data"].get("_stopped"):
         return "Bu e'lon allaqachon yopilgan (SOTILDI yoki TO'XTATILDI belgisi bor)."
     o["data"][flag] = True
@@ -713,6 +746,8 @@ async def send_human(bot: Bot, uid: int, text: str, kw: dict, markup=None):
 # ================= Oldindan ko'rish va to'lov =================
 async def send_preview(bot: Bot, uid: int, order: dict):
     kw = await db.send_kw(uid)
+    lang = await db.get_lang(uid)
+    st = order["status"]
     if kw:
         await asyncio.sleep(1.5)
     else:
@@ -720,16 +755,28 @@ async def send_preview(bot: Bot, uid: int, order: dict):
     await publisher.send_ad(bot, uid, order, **kw)
     await db.set_preview_shown(order["id"], True)
     if kw:  # business lichka — tugmasiz, odamdek
-        price = fmt_sum(order_price(order)) + (f" ({tariff_name(order_days(order))})" if order_days(order) > 1 else "")
-        await send_human(bot, uid, tr("preview_ask", await db.get_lang(uid), price=price), kw)
+        if st == "paid":
+            await send_human(bot, uid, tr("preview_ask_paid", lang), kw)
+        elif st == "awaiting_payment":
+            await send_human(bot, uid, tr("preview_ask_awaiting", lang), kw)
+        else:
+            price = fmt_sum(order_price(order)) + (f" ({tariff_name(order_days(order))})" if order_days(order) > 1 else "")
+            await send_human(bot, uid, tr("preview_ask", lang, price=price), kw)
         return
+    ok_text = {"paid": "✅ Hammasi to'g'ri — joylash", "awaiting_payment": "✅ Hammasi to'g'ri"}.get(
+        st, "✅ Hammasi to'g'ri — to'lovga o'tish")
     kb = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Hammasi to'g'ri — to'lovga o'tish", callback_data=f"ok:{order['id']}")],
+        [InlineKeyboardButton(text=ok_text, callback_data=f"ok:{order['id']}")],
         [InlineKeyboardButton(text="✏️ O'zgartirish", callback_data=f"edit:{order['id']}")],
     ])
-    tname = f" ({tariff_name(order_days(order))})" if order_days(order) > 1 else ""
-    await bot.send_message(uid, f"Tekshirib chiqing. E'lon narxi: <b>{fmt_sum(order_price(order))} so'm</b>{tname}.",
-                           reply_markup=kb)
+    if st == "paid":
+        msg = "Tekshirib chiqing. To'lov qabul qilingan — tasdiqlasangiz darrov joylayman."
+    elif st == "awaiting_payment":
+        msg = "Tekshirib chiqing. Tasdiqlasangiz, to'lov tushishi bilan avtomatik joylanadi."
+    else:
+        tname = f" ({tariff_name(order_days(order))})" if order_days(order) > 1 else ""
+        msg = f"Tekshirib chiqing. E'lon narxi: <b>{fmt_sum(order_price(order))} so'm</b>{tname}."
+    await bot.send_message(uid, msg, reply_markup=kb)
 
 
 async def start_payment(bot: Bot, uid: int, o: dict):
@@ -745,7 +792,8 @@ async def start_payment(bot: Bot, uid: int, o: dict):
                             f"👤 <a href=\"tg://user?id={uid}\">{name}</a>"
                             + (f" (@{user['username']})" if user.get("username") else "")
                             + f"\n📦 {escape(o['data'].get('title', ''))}"
-                            + (f"\n📅 Tarif: {tariff_name(order_days(o))}" if order_days(o) > 1 else ""))
+                            + (f"\n📅 Tarif: {tariff_name(order_days(o))}" if order_days(o) > 1 else "")
+                            + ("\n📝 E'lon to'lovdan keyin tayyorlanadi" if missing_fields(o) else ""))
     if o["status"] == "awaiting_payment":
         await send_payment_message(bot, uid, o)
 
@@ -792,7 +840,7 @@ async def cb_ok(cb: CallbackQuery, bot: Bot):
     if not o or o["user_id"] != cb.from_user.id:
         await cb.answer("Bu e'lon topilmadi", show_alert=True)
         return
-    if o["status"] not in ("draft", "awaiting_payment"):
+    if o["status"] not in ("draft", "awaiting_payment", "paid"):
         await cb.answer("Bu e'lon allaqachon yopilgan", show_alert=True)
         return
     if miss := missing_fields(o):
@@ -803,7 +851,14 @@ async def cb_ok(cb: CallbackQuery, bot: Bot):
         await cb.message.edit_reply_markup(reply_markup=None)
     except Exception:
         pass
-    await start_payment(bot, cb.from_user.id, o)
+    await db.update_data(o["id"], {"_confirmed": True})
+    o = await db.get_order(o["id"])
+    if o["status"] == "paid":
+        await to_group(bot, await services.publish_order(bot, o["id"]))
+    elif o["status"] == "awaiting_payment":
+        await cb.message.answer("Zo'r 👍 To'lov tushishi bilan e'loningiz avtomatik joylanadi.")
+    else:
+        await start_payment(bot, cb.from_user.id, o)
 
 
 @router.callback_query(F.data.startswith("edit:"))
@@ -835,9 +890,11 @@ async def cb_cancel(cb: CallbackQuery):
 
 
 # ================= Chek (qo'lda tekshirish) =================
-async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True) -> bool:
+async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True, forward_unknown: bool = False) -> bool:
     """Chekni AI bilan o'qib, guruhga tasdiqlash tugmalari bilan yuboradi.
-    strict=False — rasm chek bo'lmasa hech narsa qilmaydi va False qaytaradi (oddiy rasm sifatida davom etiladi)."""
+    strict=False — rasm chek bo'lmasa hech narsa qilmaydi va False qaytaradi (oddiy rasm sifatida davom etiladi).
+    forward_unknown=True — AI rasmni o'qiy olmasa, adminga "chek bo'lishi mumkin" deb yuboradi, lekin False qaytaradi
+    (rasm e'longa ham qo'shiladi)."""
     user = m.from_user
     try:
         buf = await bot.download(m.photo[-1])
@@ -845,8 +902,9 @@ async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True) ->
     except Exception:
         log.exception("chekni yuklab bo'lmadi")
         info = None
+    unknown = info is None
     if not (info and info.get("is_receipt")):
-        if not strict:
+        if not strict and not (unknown and forward_unknown):
             return False
         if info is not None:  # AI aniq "chek emas" dedi — guruhni band qilmaymiz
             await send_human(bot, user.id, tr("receipt_bad", await db.get_lang(user.id)), await db.send_kw(user.id))
@@ -870,7 +928,8 @@ async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True) ->
                    + ("\n👉 Click ilovangizdan tushganini tekshiring" if "click" in svc.lower() else ""))
     late = "\n⏰ To'lov muddati o'tgan e'lon" if o["status"] == "expired" else ""
     # Har bir bo'lak qisqa — HTML kesilmasdan 1024 belgiga sig'adi
-    caption = (f"🧾 <b>Chek</b> — e'lon #{o['id']}\n"
+    caption = (("🧾 <b>Chek bo'lishi mumkin</b> (AI o'qiy olmadi, e'lon rasmi ham bo'lishi mumkin)" if unknown
+                else "🧾 <b>Chek</b>") + f" — e'lon #{o['id']}\n"
                f"Kutilgan summa: <b>{fmt_sum(o['amount'])} so'm</b>\n"
                f"👤 <a href=\"tg://user?id={user.id}\">{escape(user.full_name[:60])}</a>"
                + (f" (@{user.username})" if user.username else "")
@@ -887,5 +946,7 @@ async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True) ->
         await to_group(bot, f"🧾 #{o['id']} cheki keldi, lekin rasmni yuborib bo'lmadi. "
                             f"Mijoz: <a href=\"tg://user?id={user.id}\">{escape(user.full_name[:60])}</a>\n"
                             f"Tasdiqlash: /tasdiq {o['id']}")
+    if unknown and forward_unknown:
+        return False  # chekmi yoki e'lon rasmi — noma'lum: admin ko'radi, rasm esa e'longa qo'shiladi
     await bot.send_message(user.id, tr("receipt_got", await db.get_lang(user.id)), **await db.send_kw(user.id))
     return True

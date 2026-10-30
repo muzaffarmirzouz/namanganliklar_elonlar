@@ -233,6 +233,8 @@ async def set_preview_shown(order_id: int, shown: bool) -> None:
     o = await get_order(order_id)
     data = o["data"]
     data["_preview"] = shown
+    if not shown:
+        data["_confirmed"] = False  # e'lon o'zgardi — mijoz qayta tasdiqlashi kerak
     await _db.execute("UPDATE orders SET data=? WHERE id=?",
                       (json.dumps(data, ensure_ascii=False), order_id))
     await _db.commit()
@@ -329,6 +331,12 @@ async def reserved_amounts(window_sec: int = LATE_PAYMENT_SEC) -> set[int]:
         (int(time.time()) - window_sec,),
     )
     return {r["amount"] for r in await cur.fetchall()}
+
+
+async def paid_unpublished() -> list[dict]:
+    """To'langan, lekin hali kanalga chiqmagan (e'lon tayyorlanayotgan) buyurtmalar."""
+    cur = await _db.execute("SELECT * FROM orders WHERE status='paid' ORDER BY id")
+    return [_order(r) for r in await cur.fetchall()]
 
 
 async def expired_awaiting(ttl_sec: int) -> list[dict]:
