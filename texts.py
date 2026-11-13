@@ -93,9 +93,9 @@ T = {
     "btn_click": {"uz_latn": "🔵 Click orqali to'lash", "uz_cyrl": "🔵 Click орқали тўлаш", "ru": "🔵 Оплатить через Click"},
     # --- Bitta qisqa to'lov xabari ---
     "pay_head": {
-        "uz_latn": "To'lov: {amount} so'm — aynan shu summani to'lang",
-        "uz_cyrl": "Тўлов: {amount} сўм — айнан шу суммани тўланг",
-        "ru": "Оплата: {amount} сум — переведите именно эту сумму",
+        "uz_latn": "To'lov: {amount} so'm (aynan shu summa)",
+        "uz_cyrl": "Тўлов: {amount} сўм (айнан шу сумма)",
+        "ru": "Оплата: {amount} сум (ровно эта сумма)",
     },
     "pay_search": {
         "uz_latn": "Silka ochilmasa, ilovada qidiring: {names}",
@@ -103,9 +103,9 @@ T = {
         "ru": "Если ссылка не открывается, найдите в приложении: {names}",
     },
     "pay_foot": {
-        "uz_latn": "To'lov tushishi bilan e'loningiz kanalga chiqadi.",
-        "uz_cyrl": "Тўлов тушиши билан эълонингиз каналга чиқади.",
-        "ru": "Как только оплата поступит, объявление выйдет в канале.",
+        "uz_latn": "To'lov tushishi bilan e'loningiz chiqadi.",
+        "uz_cyrl": "Тўлов тушиши билан эълонингиз чиқади.",
+        "ru": "Как только оплата поступит, объявление выйдет.",
     },
     "pay_foot_click_receipt": {
         "uz_latn": "To'lov tushishi bilan e'loningiz kanalga chiqadi. Click'dan to'lasangiz, chek skrinshotini shu yerga tashlang.",
@@ -117,7 +117,7 @@ T = {
         "uz_cyrl": "Тўлов тушиши билан эълонингизни каналга чиқариб юбораман. Агар 10 дақиқада чиқмаса, тўлов чекининг скриншотини шу ерга ташлаб қўйинг",
         "ru": "Как только оплата поступит, сразу опубликую объявление в канале. Если через 10 минут не появится — пришлите сюда скриншот чека",
     },
-    "btn_pay": {"uz_latn": "💳 Payme orqali to'lash", "uz_cyrl": "💳 Payme орқали тўлаш", "ru": "💳 Оплатить через Payme"},
+    "btn_pay": {"uz_latn": "🟢 Payme orqali to'lash", "uz_cyrl": "🟢 Payme орқали тўлаш", "ru": "🟢 Оплатить через Payme"},
     "btn_cancel": {"uz_latn": "❌ E'lonni bekor qilish", "uz_cyrl": "❌ Эълонни бекор қилиш", "ru": "❌ Отменить объявление"},
     "receipt_got": {
         "uz_latn": "Chekni oldim, tekshirib e'loningizni chiqarib yuboraman 👍",
