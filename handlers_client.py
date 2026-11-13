@@ -21,7 +21,7 @@ from aiogram.types import (BusinessConnection, CallbackQuery, InlineKeyboardButt
 import ai
 import db
 import publisher
-from config import (AD_PRICE, TARIFFS, ADMIN_CONTACT, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
+from config import (AD_PRICE, TARIFFS, ADMIN_CONTACT, CARD_NUMBER, CARD_OWNER, BUSINESS_PAUSE_HOURS, CHANNEL_TITLE, CLICK_ENABLED,
                     EDIT_WINDOW_DAYS, MAX_EDITS, SOLD_WINDOW_DAYS,
                     CLICK_GROUP_ID, CLICK_SEARCH_NAME, MAX_PHOTOS,
                     PAYME_SEARCH_NAME, PAYMENT_GROUP_ID, PAYMENT_TTL_HOURS, UNIQUE_AMOUNT)
@@ -343,6 +343,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
         want_preview = False
         want_payment = False
         want_publish = False
+        want_card = False
 
         async def state() -> str:
             lang_line = (f"MIJOZ TILI: {LANG_NAMES.get(lang, lang)}. Javobni FAQAT shu tilda va shu yozuvda yoz "
@@ -420,7 +421,11 @@ async def run_ai(bot: Bot, uid: int, text: str):
                 lines.append("BOSQICH: TO'LOV QABUL QILINGAN — endi e'lonni tayyorla. Yetishmayotganlarni bitta-ikkita "
                              "savol bilan so'ra va update_ad bilan saqla; hammasi to'liq bo'lsa show_preview; mijoz "
                              "'ha/to'g'ri' desa publish_now. To'lov haqida boshqa gapirma, tarifni o'zgartirib bo'lmaydi.")
-            if o["data"].get("_manual_pay"):
+            if o["data"].get("_card_given"):
+                lines.append("Mijozga KARTA raqami berilgan (bot yuborgan). Kartaga pul tushsa avtomatik tasdiqlanadi. "
+                             "Karta raqamini qayta so'rasa — manual_payment chaqir (bot yana yuboradi). 'To'ladim' desa-yu "
+                             "e'lon chiqmasa — chek skrinshotini so'ra. Qistama.")
+            elif o["data"].get("_manual_pay"):
                 lines.append(f"Mijoz {o['data']['_manual_pay']} orqali to'lamoqchi — adminga xabar berilgan. Uni to'lovga "
                              "QISTAMA, 'to'lang' deb takrorlama; admin o'zi hal qiladi.")
             if o["status"] == "awaiting_payment":
@@ -444,16 +449,25 @@ async def run_ai(bot: Bot, uid: int, text: str):
             return "\n".join(lines)
 
         async def on_tool(name: str, args: dict) -> str:
-            nonlocal want_preview, want_payment, want_publish
+            nonlocal want_preview, want_payment, want_publish, want_card
             o = await db.active_order(uid)
             if name == "manual_payment":
                 method = str(args.get("method") or "boshqa")[:40]
                 u = await db.get_user(uid) or {}
+                cardable = bool(CARD_NUMBER) and not any(w in method.lower() for w in ("bankomat", "naqd", "nal"))
+                if cardable and o and o["status"] in ("draft", "awaiting_payment"):
+                    if o["status"] == "draft" and not known_item(o):
+                        return ("Avval nima e'lon qilinishini aniqla (update_ad: category + title), keyin yana "
+                                "manual_payment chaqir — bot karta raqamini o'zi yuboradi.")
+                    want_card = True
+                    return ("Bot javobingdan keyin karta raqami va aniq summani O'ZI yuboradi. Sen karta raqamini yozma — "
+                            "faqat juda qisqa yoz, masalan: 'Xo'p, mana karta 👇'. To'lov kartaga tushgach avtomatik "
+                            "tekshiriladi; chek skrinshotini ham tashlab qo'yishi mumkin.")
                 pay_o = o if o and o["status"] in ("draft", "awaiting_payment") else (await db.recent_expired(uid))
                 order_txt = (f"\n📦 #{pay_o['id']} «{escape(pay_o['data'].get('title', ''))}»"
                              + (f" — {fmt_sum(pay_o['amount'])} so'm" if pay_o.get("amount") else "")
                              + f"\nTo'lov tushsa tasdiqlash: /tasdiq {pay_o['id']}") if pay_o else ""
-                await to_group(bot, f"🔔 <b>ADMIN KERAK</b> — mijoz {escape(method)} orqali to'lamoqchi / karta raqam so'rayapti\n"
+                await to_group(bot, f"🔔 <b>ADMIN KERAK</b> — mijoz {escape(method)} orqali to'lamoqchi\n"
                                     f"👤 <a href=\"tg://user?id={uid}\">{escape(u.get('full_name') or str(uid))}</a>"
                                     + (f" (@{u['username']})" if u.get("username") else "")
                                     + (f"\n💬 «{escape(str(args.get('note', '')))[:200]}»" if args.get("note") else "")
@@ -462,10 +476,10 @@ async def run_ai(bot: Bot, uid: int, text: str):
                     await db.update_data(pay_o["id"], {"_manual_pay": method})
                 if o and o["status"] == "awaiting_payment":
                     want_payment = True  # silkalarni qisqa xabarda qayta yuboramiz
-                return ("Adminga xabar berildi. Mijozga qisqa ayt: karta, Paynet yoki bankomat orqali to'lasa admin kelguncha "
-                        "biroz kutadi; pastdagi silka orqali to'lasa e'loni ancha tezroq chiqadi"
+                return ("Adminga xabar berildi. Mijozga qisqa ayt: bu yo'l bilan to'lasa admin kelguncha biroz kutadi; "
+                        "pastdagi silka orqali to'lasa e'loni ancha tezroq chiqadi"
                         + (" (bot silkalarni o'zi yuboradi — sen yozma)." if o and o["status"] == "awaiting_payment" else ".")
-                        + " Karta raqamini O'ZING BERMA va o'ylab topma — uni admin yozadi.")
+                        + " Karta raqamini O'ZING yozma va o'ylab topma.")
             if name == "apply_to_campaign":
                 camp = await db.user_campaign(uid)
                 if not camp:
@@ -610,7 +624,7 @@ async def run_ai(bot: Bot, uid: int, text: str):
             await bot.send_message(uid, tr("tech_error", lang), parse_mode=None, **kw)
             return
 
-        if not reply and not want_preview and not want_payment:
+        if not reply and not want_preview and not want_payment and not want_card:
             reply = tr("ack", lang)  # AI matn yozmay qolsa ham mijoz javobsiz qolmasin
         note = reply or ("(tayyor e'lon ko'rsatildi)" if want_preview else "(to'lov ma'lumoti yuborildi)")
         history += [{"role": "user", "content": text}, {"role": "assistant", "content": note}]
@@ -623,6 +637,8 @@ async def run_ai(bot: Bot, uid: int, text: str):
             await send_preview(bot, uid, o)
         if want_payment and o:
             await start_payment(bot, uid, o)
+        if want_card and o and o["status"] in ("draft", "awaiting_payment"):
+            await send_card(bot, uid, o)
         if want_publish and o and o["status"] == "paid":
             res = await services.publish_order(bot, o["id"])
             await to_group(bot, res)
@@ -779,7 +795,29 @@ async def send_preview(bot: Bot, uid: int, order: dict):
     await bot.send_message(uid, msg, reply_markup=kb)
 
 
-async def start_payment(bot: Bot, uid: int, o: dict):
+async def send_card(bot: Bot, uid: int, o: dict):
+    """Mijoz karta so'radi: buyurtma to'lov kutish holatiga o'tadi (kerak bo'lsa) va karta raqami + aniq summa yuboriladi.
+    Karta raqami faqat sozlamadan olinadi — AI uni hech qachon yozmaydi."""
+    if o["status"] == "draft":
+        await start_payment(bot, uid, o, send=False)
+        o = await db.get_order(o["id"])
+    await db.update_data(o["id"], {"_card_given": int(time.time()), "_price_base": order_price(o), "_manual_pay": "karta"})
+    lang = await db.get_lang(uid)
+    owner = ("👤 " + CARD_OWNER) if CARD_OWNER else ""
+    text = tr("card_pay", lang, amount=fmt_sum(o["amount"]), card=CARD_NUMBER, owner=owner).replace("\n\n\n", "\n\n")
+    kw = await db.send_kw(uid)
+    if kw:
+        try:
+            await bot.send_chat_action(uid, ChatAction.TYPING, **kw)
+        except Exception:
+            pass
+        await asyncio.sleep(2)
+    await bot.send_message(uid, text, parse_mode=None, disable_web_page_preview=True, **kw)
+    await to_group(bot, f"💳 #{o['id']} — mijozga karta berildi, kutilgan summa <b>{fmt_sum(o['amount'])} so'm</b>. "
+                        f"Kartaga tushsa avtomatik tasdiqlanadi (yaxlit {fmt_sum(order_price(o))} tashlasa ham taniladi).")
+
+
+async def start_payment(bot: Bot, uid: int, o: dict, send: bool = True):
     """Qoralamani to'lov kutish holatiga o'tkazib, mijozga summa va Payme silkasini yuboradi."""
     if o["status"] == "draft":
         amount = pick_amount(await db.reserved_amounts(), order_price(o))
@@ -794,7 +832,7 @@ async def start_payment(bot: Bot, uid: int, o: dict):
                             + f"\n📦 {escape(o['data'].get('title', ''))}"
                             + (f"\n📅 Tarif: {tariff_name(order_days(o))}" if order_days(o) > 1 else "")
                             + ("\n📝 E'lon to'lovdan keyin tayyorlanadi" if missing_fields(o) else ""))
-    if o["status"] == "awaiting_payment":
+    if o["status"] == "awaiting_payment" and send:
         await send_payment_message(bot, uid, o)
 
 

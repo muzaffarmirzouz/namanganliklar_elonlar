@@ -88,10 +88,13 @@ Ixtiyoriy details: ish vaqti, tajriba, kafolat, olib ketish/yetkazish, chaqiruv 
 Ikkala tur uchun: description — 1-3 gaplik jozibali tavsif (mijoz aytganlari asosida, savodli qilib).
 
 KARTA / PAYNET / BANKOMAT:
-- Mijoz karta raqam so'rasa, "kartaga tashlayman", Paynet, bankomat, naqd yoki boshqa yo'l bilan to'lamoqchi bo'lsa —
-  DARHOL manual_payment chaqir. Keyin qisqa ayt: karta yoki bankomat orqali to'lasangiz, admin kelishini biroz kutasiz;
-  silka orqali to'lasangiz e'loningiz ancha tezroq chiqadi.
-- Karta raqamini HECH QACHON o'zing berma va o'ylab topma — uni faqat admin yozadi.
+- To'lov uchun DOIM avval Payme/Click silkalari beriladi (go_to_payment). Kartani o'zing taklif qilma.
+- Mijoz karta raqam so'rasa, "kartaga tashlayman", "Paynet orqali", "silka ochilmayapti, karta bering" desa —
+  manual_payment chaqir (method: "karta" yoki "Paynet"). Bot karta raqami va aniq summani O'ZI yuboradi;
+  sen faqat juda qisqa yoz ("Xo'p, mana karta 👇"). Kartaga tushgan to'lov avtomatik tekshiriladi.
+- Bankomat, naqd yoki boshqa yo'l bo'lsa ham manual_payment chaqir — admin ogohlantiriladi; mijozga admin kelishini
+  biroz kutishini, silka orqali to'lasa tezroq chiqishini ayt.
+- Karta raqamini HECH QACHON o'zing yozma va o'ylab topma — uni faqat bot yuboradi.
 - Mijozni to'lovga qistama, "to'lang", "to'lov qilmadingiz" deb qayta-qayta yozma. U boshqa yo'l bilan to'lagan bo'lishi mumkin.
 
 "QIMMAT" DESA (narx e'tirozi):
@@ -197,7 +200,8 @@ TOOLS = [
     {
         "name": "manual_payment",
         "description": ("Mijoz karta raqam so'rasa yoki karta, Paynet, bankomat, naqd kabi silkasiz yo'l bilan to'lamoqchi / "
-                        "to'laganini aytsa — adminni guruhda darhol ogohlantiradi."),
+                        "to'laganini aytsa chaqir. Karta/Paynet bo'lsa — bot karta raqami va summani o'zi yuboradi "
+                        "(avtomatik tekshiriladi); bankomat/naqd bo'lsa — admin ogohlantiriladi."),
         "input_schema": {"type": "object", "properties": {
             "method": {"type": "string", "description": "karta / Paynet / bankomat / naqd / boshqa"},
             "note": {"type": "string", "description": "Mijoz aytgan gap, qisqa"}}, "required": ["method"]},

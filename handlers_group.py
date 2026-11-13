@@ -16,7 +16,7 @@ from aiogram.types import Message, ReplyParameters
 
 import ai
 import db
-from config import (AD_PRICE, TARIFFS, ADMIN_IDS, CLICK_GROUP_ID, CLICK_SOURCE_IDS, PAYMENT_GROUP_ID,
+from config import (AD_PRICE, TARIFFS, ADMIN_IDS, CARD_LAST4, CLICK_GROUP_ID, CLICK_SOURCE_IDS, PAYMENT_GROUP_ID,
                     PAYMENT_SOURCE_IDS, UNIQUE_MAX_OFFSET)
 from formatting import fmt_sum
 from payments import extract_amounts, match_order
@@ -54,11 +54,17 @@ async def reply_in_group(bot: Bot, text: str, reply_to: int | None) -> None:
 
 
 async def process_payment(bot: Bot, text: str, key: str, senders: set[int], reply_to: int | None,
-                          source: str, click: bool = False, sender_is_bot: bool | None = None) -> None:
-    """click=True — Click guruhidan: u yerga HECH NARSA yozilmaydi, hisobot o'zimizning to'lov guruhiga boradi."""
+                          source: str, click: bool = False, sender_is_bot: bool | None = None,
+                          card: bool = False) -> None:
+    """click=True — Click guruhidan: u yerga HECH NARSA yozilmaydi, hisobot o'zimizning to'lov guruhiga boradi.
+    card=True — @CardXabarBot (karta kirimi) xabari: manba ham JIM, mos buyurtma bo'lmasa guruhga ham yozilmaydi
+    (kartaga boshqa shaxsiy pullar ham tushadi)."""
     text = (text or "").strip()
     if bot.id in senders:
         return  # botning o'z xabari
+    if card:
+        await process_card(bot, text)
+        return
     log.info("Guruh xabari [%s%s]: senders=%s | %r", "click/" if click else "", source, senders, text[:80])
     allowed = CLICK_SOURCE_IDS if click else PAYMENT_SOURCE_IDS
     if click:
@@ -109,6 +115,48 @@ async def process_payment(bot: Bot, text: str, key: str, senders: set[int], repl
     amount_txt = f"{fmt_sum(ai_amount)} so'm" if ai_amount else "Summa"
     await reply_in_group(bot, ("🔵 Click: " if click else "") + f"⚠️ {amount_txt} tushdi — {escape(why)}.\n"
                               f"Qo'lda tasdiqlash: /tasdiq ID\n\n⏳ Kutilayotganlar:\n{pending}", reply_to)
+
+
+_CARD_TAIL = re.compile(r"(?:\*|•|·){1,}\s?(\d{4})|\d{4}\s?\*+\s?(\d{4})")
+
+
+async def process_card(bot: Bot, text: str) -> None:
+    """Karta kirimi: faqat mos buyurtma topilsa ishlaydi. Shaxsiy kirimlar haqida hech kimga hech narsa yozilmaydi."""
+    if not text:
+        return
+    tails = {a or b for a, b in _CARD_TAIL.findall(text)}
+    if CARD_LAST4 and tails and CARD_LAST4 not in tails:
+        return  # boshqa kartangizga tushgan pul
+    key = "card:" + hashlib.sha1(" ".join(text.split()).encode()).hexdigest()
+    async with _seen_lock:
+        if await db.payment_seen(key):
+            return
+        await db.log_payment(key, text, None, None)
+    info = await ai.parse_payment_text(text)
+    if info is not None and (not info.get("is_payment") or info.get("incoming") is False):
+        return  # chiqim yoki boshqa xabar
+    ai_amount = _to_int(info.get("amount")) if info else None
+    awaiting = await db.matchable_orders()
+    order, why = match_order(text, ai_amount, awaiting)
+    if not order and ai_amount:
+        # Kartaga ko'pincha yaxlit summa tashlashadi (50 000). Karta berilgan va shu narxdagi buyurtma bitta bo'lsa — o'sha
+        base = [o for o in awaiting if o["data"].get("_card_given")
+                and ai_amount == int(o["data"].get("_price_base") or 0)]
+        if len(base) == 1:
+            order, why = base[0], f"yaxlit summa {ai_amount}, karta berilgan yagona buyurtma"
+    await db.update_payment(key, ai_amount, order["id"] if order else None)
+    if order:
+        log.info("Karta to'lovi %s -> #%s (%s)", key, order["id"], why)
+        late = order["status"] == "expired"
+        res = await confirm_and_publish(bot, order["id"], key, manual=late)
+        await reply_in_group(bot, "💳 Karta: " + res + ("\n⏰ (to'lov muddatidan keyin keldi)" if late else ""), None)
+        return
+    # Mos kelmadi: summa e'lon narxiga yaqin bo'lsa va kimgadir karta berilgan bo'lsa — adminga ayt (summani xolos)
+    carded = [o for o in awaiting if o["data"].get("_card_given")]
+    if ai_amount and carded and any(p <= ai_amount <= p + UNIQUE_MAX_OFFSET for p in TARIFFS.values()):
+        lst = "\n".join(f"#{o['id']} — {fmt_sum(o['amount'])} so'm" for o in carded[:10])
+        await reply_in_group(bot, f"💳 Kartaga {fmt_sum(ai_amount)} so'm tushdi, lekin aniq buyurtmaga mos kelmadi.\n"
+                                  f"Karta berilganlar:\n{lst}\nTekshirib tasdiqlang: /tasdiq ID", None)
 
 
 @router.message()

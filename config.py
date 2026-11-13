@@ -61,6 +61,16 @@ CLICK_GROUP_ID = int(os.getenv("CLICK_GROUP_ID", "0") or 0)
 CLICK_SOURCE_IDS = _ids(os.getenv("CLICK_SOURCE_IDS", ""))
 PAYMENT_TTL_HOURS = int(os.getenv("PAYMENT_TTL_HOURS", "24"))
 
+# --- Karta orqali to'lov (mijoz karta so'rasa beriladi; silkalar baribir birinchi) ---
+# Karta raqami faqat Railway Variables'da turadi — kodda va GitHub'da emas!
+CARD_NUMBER = os.getenv("CARD_NUMBER", "").strip()
+CARD_OWNER = os.getenv("CARD_OWNER", "").strip()          # karta egasining ismi (mijoz tekshirishi uchun)
+CARD_LAST4 = "".join(c for c in CARD_NUMBER if c.isdigit())[-4:]
+# Karta kirimlari bildirishnomasi: userbot @CardXabarBot bilan shaxsiy chatni JIM o'qiydi
+CARD_BOT_USERNAME = os.getenv("CARD_BOT_USERNAME", "CardXabarBot").lstrip("@")
+# Qo'shimcha: CardXabar xabarlari forward qilinadigan guruh(lar) ID si (masalan "CHEK UCHUN"). U yerda ham bot JIM
+CARD_CHAT_IDS = _ids(os.getenv("CARD_CHAT_IDS", ""))
+
 # --- E'lon ---
 MAX_PHOTOS = int(os.getenv("MAX_PHOTOS", "10"))
 # 0 = o'chirilmaydi. 24 = e'lon 1 kundan keyin kanaldan o'chiriladi (Telegram 48 soatgacha ruxsat beradi)

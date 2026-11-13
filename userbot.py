@@ -11,10 +11,12 @@ import logging
 
 from aiogram import Bot
 
-from config import CLICK_GROUP_ID, PAYMENT_GROUP_ID, TG_API_HASH, TG_API_ID, TG_SESSION
+from config import (CARD_BOT_USERNAME, CARD_CHAT_IDS, CARD_NUMBER, CLICK_GROUP_ID, PAYMENT_GROUP_ID, TG_API_HASH,
+                    TG_API_ID, TG_SESSION)
 from handlers_group import process_payment
 
 log = logging.getLogger(__name__)
+CARD_WATCH = False  # karta kirimlari kuzatilyaptimi (ishga tushish xabari uchun)
 CLIENT = None  # ishga tushgan Telethon mijozi (post raqamini topish uchun ham kerak)
 
 
@@ -55,6 +57,25 @@ async def start(bot: Bot):
         await client.disconnect()
         return None
 
+    # Karta kirimlari: @CardXabarBot bilan shaxsiy chat (userbot akkauntiga karta ulangan bo'lsa) + qo'shimcha guruhlar
+    card_chats = set(CARD_CHAT_IDS)
+    if CARD_NUMBER and CARD_BOT_USERNAME:
+        try:
+            card_bot = await client.get_entity(CARD_BOT_USERNAME)
+            card_chats.add(card_bot.id)
+            log.info("Userbot: @%s (id=%s) karta kirimlari kuzatiladi", CARD_BOT_USERNAME, card_bot.id)
+        except Exception as e:
+            log.warning("Userbot: @%s topilmadi (%s) — karta kirimlari faqat CARD_CHAT_IDS dan", CARD_BOT_USERNAME, e)
+
+    @client.on(events.NewMessage())
+    async def on_card(event):
+        if not CARD_NUMBER or event.chat_id not in card_chats:
+            return
+        try:  # JIM: u chatlarga hech narsa yozilmaydi
+            await process_payment(bot, event.message.message or "", "", set(), None, "card", card=True)
+        except Exception:
+            log.exception("Userbot: karta kirimini qayta ishlashda xato")
+
     @client.on(events.NewMessage())
     async def on_new(event):
         click = bool(CLICK_GROUP_ID) and event.chat_id == CLICK_GROUP_ID
@@ -77,8 +98,9 @@ async def start(bot: Bot):
         except Exception:
             log.exception("Userbot: to'lovni qayta ishlashda xato")
 
-    global CLIENT
+    global CLIENT, CARD_WATCH
     CLIENT = client
+    CARD_WATCH = bool(card_chats)
     me = await client.get_me()
     log.info("Userbot ulandi: %s (id=%s), guruh %s kuzatilmoqda", me.first_name, me.id, PAYMENT_GROUP_ID)
     return client

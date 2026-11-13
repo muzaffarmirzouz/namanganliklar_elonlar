@@ -104,6 +104,10 @@ async def main():
     if config.CLICK_GROUP_ID:
         ub_txt += "\n🔵 Click guruhi jim kuzatilmoqda" + ("" if config.CLICK_SOURCE_IDS else
                                                           " (⚠️ CLICK_SOURCE_IDS berilmagan)")
+    if config.CARD_NUMBER:
+        ub_txt += (f"\n💳 Karta (*{config.CARD_LAST4}) so'ralsa beriladi; kirimlar @{config.CARD_BOT_USERNAME} orqali jim tekshiriladi"
+                   if userbot.CARD_WATCH else
+                   f"\n💳 Karta (*{config.CARD_LAST4}) so'ralsa beriladi, ⚠️ lekin kirimlar kuzatilmayapti — chek bo'yicha /tasdiq")
     sample = publisher.post_link(1).removesuffix("/1")
     await to_group(bot, f"🤖 @{me.username} ishga tushdi. E'lon narxi: {fmt_sum(config.AD_PRICE)} so'm.{ub_txt}"
                         f"\n🔗 Post silkalari: {sample}/…{link_note}")
