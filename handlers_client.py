@@ -231,12 +231,6 @@ async def on_photo(m: Message, bot: Bot):
     kw = await db.send_kw(uid)
     o = await db.active_order(uid)
 
-    single_photo = bool(m.photo) and m.media_group_id is None  # chek hech qachon albom bo'lib kelmaydi
-    if o and o["status"] == "awaiting_payment" and single_photo:
-        # Avval to'lov, keyin e'lon: rasm chek bo'lsa — adminga, oddiy rasm bo'lsa — e'longa qo'shiladi.
-        # AI rasmni o'qiy olmasa — ehtiyot uchun adminga ham yuboriladi va e'longa ham qo'shiladi.
-        if await forward_receipt(bot, m, o, strict=False, forward_unknown=True):
-            return
     if not o and m.photo:
         # To'lov muddati o'tgan e'lon bormi? Bot "chekni shu yerga tashlang" degan — rasm chek bo'lsa, adminga
         expired = await db.recent_expired(uid)
@@ -245,6 +239,31 @@ async def on_photo(m: Message, bot: Bot):
     if o and o["status"] == "paid" and o["data"].get("_confirmed") and not missing_fields(o):
         await bot.send_message(uid, tr("paid_wait", await db.get_lang(uid)), **kw)  # e'lon allaqachon joylanmoqda
         return
+
+    # HAR BIR rasm (albomdagisi ham) chekmi-yo'qmi tekshiriladi: chek hech qachon e'longa qo'shilmaydi.
+    # Mijozlar ko'pincha chekni albom qilib, e'lon rasmlari bilan birga yoki to'lovdan keyin yuboradi.
+    if m.photo:
+        _pending_reads[uid] += 1  # albom javobi chek o'qilib bo'lguncha kutib tursin
+        try:
+            info = await read_photo_receipt(bot, m)
+        finally:
+            _pending_reads[uid] -= 1
+        if info and info.get("is_receipt"):
+            _album_receipts[uid] += 1
+            first = m.media_group_id is None or m.media_group_id not in _receipt_groups
+            if m.media_group_id:
+                if len(_receipt_groups) > 2000:
+                    _receipt_groups.clear()
+                _receipt_groups.add(m.media_group_id)
+            if o and o["status"] == "awaiting_payment" and first:
+                await forward_receipt(bot, m, o, strict=False, info=info)  # adminga (albomdan faqat bittasi)
+            if t := _album_timers.get(uid):
+                t.cancel()
+            _album_timers[uid] = asyncio.create_task(_flush_photos(bot, uid))
+            return
+        if info is None and o and o["status"] == "awaiting_payment" and m.media_group_id is None:
+            # AI rasmni o'qiy olmadi — ehtiyot uchun adminga ham ko'rsatamiz, rasm esa e'longa qo'shiladi
+            await forward_receipt(bot, m, o, strict=False, forward_unknown=True, info=None)
 
     item = m.photo[-1].file_id if m.photo else {"t": "video", "id": m.video.file_id}
     async with _photo_locks[uid]:
@@ -273,22 +292,39 @@ async def on_photo(m: Message, bot: Bot):
 async def _flush_photos(bot: Bot, uid: int):
     try:
         await asyncio.sleep(2)
+        for _ in range(60):  # albomdagi boshqa rasmlar hali chek tekshiruvida bo'lsa — kutamiz (ko'pi 30 s)
+            if _pending_reads.get(uid, 0) <= 0:
+                break
+            await asyncio.sleep(0.5)
     except asyncio.CancelledError:
         return
     _album_timers.pop(uid, None)
+    n_receipts = _album_receipts.pop(uid, 0)
     captions = _album_captions.pop(uid, [])
     plain = " ".join(_album_plain.pop(uid, [])).strip()
     fwd = _album_fwd.pop(uid, "")
     o = await db.active_order(uid)
     if not o:
+        if n_receipts:
+            await run_ai(bot, uid, f"[Tizim: mijoz {n_receipts} ta to'lov cheki rasmini yubordi. Faol e'lon yo'q.]")
         return
+    rnote = ""
+    if n_receipts:
+        st = o["status"]
+        rnote = (f" Mijoz yana {n_receipts} ta TO'LOV CHEKI rasmini yubordi — cheklar e'longa QO'SHILMADI. "
+                 + ("Chek adminga tekshirishga yuborildi va bot mijozga 'chekni oldim' deb yozdi — buni takrorlama." if st == "awaiting_payment"
+                    else "To'lov allaqachon qabul qilingan — mijozga buni qisqa ayt." if st == "paid"
+                    else "To'lov hali so'ralmagan — chekni qaysi e'lon uchun yuborganini so'ra."))
+        if not (o["photos"] or captions):  # faqat chek(lar) kelgan
+            await run_ai(bot, uid, "[Tizim:" + rnote + "]")
+            return
     n_video = sum(1 for x in o["photos"] if isinstance(x, dict) and x.get("t") == "video")
     n_photo = len(o["photos"]) - n_video
     note = (f"[Tizim: mijoz media yubordi. Qoralamada jami: {n_photo} ta rasm, {n_video} ta video "
             f"(maksimum {MAX_PHOTOS}).")
     if fwd:
         note += f" Bu boshqa joydan FORWARD qilingan: {fwd}."
-    note += "]"
+    note += rnote + "]"
     if plain:
         note += f"\nMedia ostidagi matn: «{plain[:1500]}»"
         await db.set_lang(uid, detect_lang(plain, await db.get_lang(uid)))
@@ -927,18 +963,33 @@ async def cb_cancel(cb: CallbackQuery):
 
 
 # ================= Chek (qo'lda tekshirish) =================
-async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True, forward_unknown: bool = False) -> bool:
+_album_receipts: dict[int, int] = defaultdict(int)  # albomdan ajratib olingan cheklar soni
+_receipt_groups: set[str] = set()                    # cheki adminga yuborilgan albomlar
+_pending_reads: dict[int, int] = defaultdict(int)     # hozir chek tekshiruvidagi rasmlar soni
+
+
+async def read_photo_receipt(bot: Bot, m: Message) -> dict | None:
+    """Rasmni AI bilan o'qiydi. None — o'qib bo'lmadi."""
+    try:
+        buf = await bot.download(m.photo[-1])
+        return await ai.read_receipt(buf.read())
+    except Exception:
+        log.exception("rasmni chek sifatida o'qib bo'lmadi")
+        return None
+
+
+_NOT_READ = object()
+
+
+async def forward_receipt(bot: Bot, m: Message, o: dict, strict: bool = True, forward_unknown: bool = False,
+                          info=_NOT_READ) -> bool:
     """Chekni AI bilan o'qib, guruhga tasdiqlash tugmalari bilan yuboradi.
     strict=False — rasm chek bo'lmasa hech narsa qilmaydi va False qaytaradi (oddiy rasm sifatida davom etiladi).
     forward_unknown=True — AI rasmni o'qiy olmasa, adminga "chek bo'lishi mumkin" deb yuboradi, lekin False qaytaradi
     (rasm e'longa ham qo'shiladi)."""
     user = m.from_user
-    try:
-        buf = await bot.download(m.photo[-1])
-        info = await ai.read_receipt(buf.read())
-    except Exception:
-        log.exception("chekni yuklab bo'lmadi")
-        info = None
+    if info is _NOT_READ:
+        info = await read_photo_receipt(bot, m)
     unknown = info is None
     if not (info and info.get("is_receipt")):
         if not strict and not (unknown and forward_unknown):
